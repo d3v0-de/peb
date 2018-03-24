@@ -9,7 +9,6 @@ import de.d3v0.peb.common.sourceproperties.SourceProperties;
 import de.d3v0.peb.common.dbhelper.DbHelper;
 
 import java.io.*;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.sql.SQLException;
 import java.util.*;
@@ -61,7 +60,7 @@ public class MainHandler implements Runnable
         prop = (Properties)xs.fromXML(is);
     }
 
-    protected void BackupConfig() throws IOException
+    protected void BackupConfig() throws IOException, TargetHandler.TargetTransferException
     {
         XStream xs = new XStream(new DomDriver());
         StringOutputStream sos = new StringOutputStream();
@@ -95,7 +94,7 @@ public class MainHandler implements Runnable
         {
             targetHandlerManager = TargetHandler.create(prop.targetProperties);
             dbHelper = DbHelper.Create(prop, targetHandlerManager);
-            Logger.Create(prop.workingDir + File.separator + "peb.log");
+            Logger.CreateDefault(prop.workingDir + File.separator + "peb.log");
 
             BackupConfig();
             startTranserQueue();
@@ -315,12 +314,11 @@ public class MainHandler implements Runnable
             lockTransferDoneQueue.unlock();
             transferCountDone++;
             transferVolumeDone += f.Size;
-        } catch (FileNotFoundException e)
+        } catch (Exception e)
         {
-            Logger.log(LoggerBase.LogSeverity.Error, "Error for file " + f.Path);
-            Logger.log(e);
+            LoggerBase.log(LoggerBase.LogSeverity.Error, "Error for file " + f.Path);
+            LoggerBase.log(e);
         }
-
     }
 
 

@@ -1,6 +1,7 @@
 package de.d3v0.peb.common.dbhelper;
 
 import de.d3v0.peb.common.Logger;
+import de.d3v0.peb.controller.TargetHandler;
 
 import java.io.*;
 import java.sql.DriverManager;
@@ -63,7 +64,7 @@ public class SqliteHelper extends DbHelper
     private final String DatabaseFileName = "fastbackup.db";
 
     @Override
-    public void commit() throws SQLException, FileNotFoundException
+    public void commit() throws SQLException, FileNotFoundException, TargetHandler.TargetTransferException
     {
         super.commit();
         File db = new File(getDatabaseLocalPath());

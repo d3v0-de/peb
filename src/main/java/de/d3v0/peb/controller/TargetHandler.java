@@ -1,7 +1,5 @@
 package de.d3v0.peb.controller;
 
-import com.jcraft.jsch.JSchException;
-import com.jcraft.jsch.SftpException;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 import de.d3v0.peb.common.Logger;
@@ -18,6 +16,38 @@ import java.util.List;
 
 public abstract class TargetHandler implements Closeable
 {
+    public class TargetTransferException extends Exception
+    {
+        public TargetTransferException(String var1) {
+            super(var1);
+        }
+
+        public TargetTransferException(String var1, Throwable var2) {
+            super(var1, var2);
+        }
+
+        public TargetTransferException(Throwable var1) {
+            super(var1);
+        }
+
+    }
+
+    public class BackupNotFoundException extends Exception
+    {
+        public BackupNotFoundException(String var1) {
+            super(var1);
+        }
+
+        public BackupNotFoundException(String var1, Throwable var2) {
+            super(var1, var2);
+        }
+
+        public BackupNotFoundException(Throwable var1) {
+            super(var1);
+        }
+    }
+
+
     private List<Long> backupDates;
     TargetProperties props;
 
@@ -56,7 +86,7 @@ public abstract class TargetHandler implements Closeable
             return new ArrayList<Long>();
         }
     }
-    public void saveBackupDates()
+    public void saveBackupDates() throws TargetTransferException
     {
         backupDates.add(perfDate);
 
@@ -68,24 +98,25 @@ public abstract class TargetHandler implements Closeable
         writeFile(sos.getInputStream(), props.BasePath + getSeparator() + "backups.xml");
     }
 
-    abstract void readFile(String path, OutputStream dst) throws JSchException, SftpException;
-    abstract void writeFile(InputStream src, String path);
+    abstract void readFile(String path, OutputStream dst) throws BackupNotFoundException, TargetTransferException;
+    abstract void writeFile(InputStream src, String path) throws TargetTransferException;
 
-    public void restoreFile(String relativePath, OutputStream os) throws JSchException, SftpException
+    public void restoreFile(String relativePath, OutputStream os) throws BackupNotFoundException, TargetTransferException
     {
         if (getBackupDates() != null && getBackupDates().size()!= 0)
             restoreFile(relativePath, os, getBackupDates().get(getBackupDates().size() -1));
+        else throw new BackupNotFoundException("no Backup existing yet");
     }
-    public void restoreFile(String relativePath, OutputStream os, long backupDate) throws SftpException, JSchException
+    public void restoreFile(String relativePath, OutputStream os, long backupDate) throws BackupNotFoundException, TargetTransferException
     {
         readFile(getBackupPath(relativePath, backupDate), os);
     }
 
-    protected void backupFile(InputStream src, String relativePath, long backupDate)
+    protected void backupFile(InputStream src, String relativePath, long backupDate) throws TargetTransferException
     {
         writeFile(src, getBackupPath(relativePath, backupDate));
     }
-    public void backupFile(InputStream src, String relativePath)
+    public void backupFile(InputStream src, String relativePath) throws TargetTransferException
     {
         backupFile(src, relativePath, this.perfDate);
     }

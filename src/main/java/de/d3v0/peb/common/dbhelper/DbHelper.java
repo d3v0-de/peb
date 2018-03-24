@@ -2,7 +2,6 @@ package de.d3v0.peb.common.dbhelper;
 
 import java.io.FileNotFoundException;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.sql.*;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -56,7 +55,7 @@ public abstract class DbHelper
         insertStatement = con.prepareStatement("insert into entry (path, lastMod, lastSeen, lastBackup, Size) VALUES(?, ?, ?, ?, ?)");
     }
 
-    public void commit() throws SQLException, FileNotFoundException
+    public void commit() throws SQLException, FileNotFoundException, TargetHandler.TargetTransferException
     {
         con.commit();
         con.close();

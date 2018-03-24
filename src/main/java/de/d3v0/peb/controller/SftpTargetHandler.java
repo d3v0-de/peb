@@ -24,10 +24,18 @@ public class SftpTargetHandler extends TargetHandler
         return (SftpTargetProperties) props;
     }
 
-    protected void readFile(String path, OutputStream dst) throws JSchException, SftpException
+    protected void readFile(String path, OutputStream dst) throws TargetTransferException
     {
-        getChannelSftp();
-        sftp.get(fixSeparators(path), dst);
+        try
+        {
+            getChannelSftp();
+            sftp.get(fixSeparators(path), dst);
+        }
+        catch (Exception e)
+        {
+            Logger.log(e);
+            throw new TargetTransferException("Error reading file " + path);
+        }
     }
 
     protected String fixSeparators(String path)
@@ -57,7 +65,7 @@ public class SftpTargetHandler extends TargetHandler
         }
     }
 
-    protected void writeFile(InputStream src, String path)
+    protected void writeFile(InputStream src, String path) throws TargetTransferException
     {
 
         try
@@ -69,9 +77,8 @@ public class SftpTargetHandler extends TargetHandler
             sftp.put(src, path);
         } catch (Exception ex)
         {
-            Logger.log(LoggerBase.LogSeverity.Error, "Error writing file " + path);
             Logger.log(ex);
-            return;
+            throw new TargetTransferException("Error writing file " + path);
         }
     }
 
