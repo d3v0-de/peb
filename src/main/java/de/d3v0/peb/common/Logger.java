@@ -27,11 +27,10 @@ public class Logger extends LoggerBase
         }
     }
 
-    public static void Create(String logPath)
+    public static void CreateDefault(String logPath)
     {
         instance = new Logger(logPath);
     }
-
 
     @Override
     protected void log_int(Date date, LogSeverity sev, String message) throws Exception

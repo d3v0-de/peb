@@ -34,7 +34,7 @@ public abstract class LoggerBase
         {
             try
             {
-                getInstance().log(date, sev, message);
+                getInstance().log_int(date, sev, message);
             } catch (Exception e)
             {
                 e.printStackTrace();
