@@ -25,8 +25,7 @@ public class SftpTargetHandler extends TargetHandler
     {
         try
         {
-            getChannelSftp();
-            sftp.get(fixSeparators(path), dst);
+            getSftp().get(fixSeparators(path), dst);
         }
         catch (Exception e)
         {
@@ -40,7 +39,7 @@ public class SftpTargetHandler extends TargetHandler
         return path.replace('\\', '/');
     }
 
-    protected void getChannelSftp() throws TargetTransferException
+    protected ChannelSftp getSftp() throws TargetTransferException
     {
         int retry = 2;
         if (sftp == null)
@@ -59,7 +58,7 @@ public class SftpTargetHandler extends TargetHandler
                     ChannelSftp lsftp = (ChannelSftp) session.openChannel("sftp");
                     lsftp.connect();
                     this.sftp = lsftp;
-                    return;
+                    return sftp;
                 } catch (JSchException ex)
                 {
                     LoggerBase.log(LogSeverity.Warn, ex);
@@ -68,6 +67,8 @@ public class SftpTargetHandler extends TargetHandler
             if (sftp == null)
                 throw new TargetTransferException("Failed to connect after " + retry + " tries");
          }
+
+         return sftp;
     }
 
     protected void writeFile(InputStream src, String path) throws TargetTransferException
@@ -75,8 +76,7 @@ public class SftpTargetHandler extends TargetHandler
 
         try
         {
-            getChannelSftp();
-            sftp.put(src, path);
+            getSftp().put(src, path);
         } catch (SftpException ex)
         {
             Logger.log(ex);
@@ -94,7 +94,7 @@ public class SftpTargetHandler extends TargetHandler
         try
         {
             if (checkFolderExists == false || folderExists(folderPath) == false)
-                sftp.mkdir(folderPath);
+                getSftp().mkdir(folderPath);
         }
         catch(Exception ex)
         {
@@ -103,11 +103,11 @@ public class SftpTargetHandler extends TargetHandler
         }
     }
 
-    private boolean folderExists(String path)
+    private boolean folderExists(String path) throws TargetTransferException
     {
         try
         {
-            sftp.cd(path);
+            getSftp().cd(path);
             return true;
         }
         catch (SftpException e)
@@ -168,7 +168,8 @@ public class SftpTargetHandler extends TargetHandler
     {
         try
         {
-            sftp.getSession().disconnect();
+            if (sftp != null)
+                sftp.getSession().disconnect();
         } catch (JSchException e)
         {
             Logger.log(LogSeverity.Error, "Error closing connection");

@@ -8,4 +8,10 @@ public class MyBoolean
     {
         Value = value;
     }
+
+    @Override
+    public String toString()
+    {
+        return Value ? "true" : "false";
+    }
 }

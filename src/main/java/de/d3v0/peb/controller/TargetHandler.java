@@ -6,6 +6,7 @@ import de.d3v0.peb.common.BackupFile;
 import de.d3v0.peb.common.Logger;
 import de.d3v0.peb.common.StringOutputStream;
 import de.d3v0.peb.common.misc.BackupNotFoundException;
+import de.d3v0.peb.common.misc.MyBoolean;
 import de.d3v0.peb.common.misc.TargetTransferException;
 import de.d3v0.peb.common.targetproperties.TargetProperties;
 
@@ -23,8 +24,7 @@ public abstract class TargetHandler implements Closeable
 {
     private List<Long> backupDates;
     TargetProperties props;
-    protected static Hashtable<String, ReentrantLock> dirCreated = new Hashtable<>();
-    protected static ReentrantLock dirCreatedLock = new ReentrantLock();
+    protected static Hashtable<String, MyBoolean> dirCreated = new Hashtable<>();
 
     public long getPerfDate()
     {
@@ -132,46 +132,30 @@ public abstract class TargetHandler implements Closeable
         StringBuilder currentPath = new StringBuilder();
         for (String f: relativePath.split(getSeparator()))
         {
-            ReentrantLock l = null;
+            if (f == "")
+                continue;
+            
             currentPath.append(f);
-            try
+            MyBoolean exists = null;
+            synchronized (dirCreated)
             {
-                dirCreatedLock.lock();
-                if (dirCreated.containsKey(currentPath.toString()))
+                exists = dirCreated.get(currentPath.toString());
+                if (exists == null)
                 {
-                    l = dirCreated.get(currentPath.toString());
-                    // wait for folder to be created
-                    if (l != null)
-                    {
-                        l.wait();
-                        l = null;
-                    }
+                    exists = new MyBoolean(false);
+                    dirCreated.put(currentPath.toString(), exists);
                 }
-                else
-                {
-                    l = new ReentrantLock();
-                    l.lock();
-                    dirCreated.put(currentPath.toString(), l);
-                }
-                dirCreatedLock.unlock();
+            }
 
-                if (l != null)
+            synchronized (exists)
+            {
+                if (exists.Value == false)
                 {
                     boolean checkFolderexists = props.BasePath.contains(currentPath.toString());
                     createFolderInt(currentPath.toString(), checkFolderexists);
+                    exists.Value = true;
                 }
-
-
-            } catch (TargetTransferException e)
-            {
-                throw e;
-            } catch (InterruptedException e)
-            {
-            } finally
-            {
-                l.unlock();
             }
-
             currentPath.append(getSeparator());
         }
     }
