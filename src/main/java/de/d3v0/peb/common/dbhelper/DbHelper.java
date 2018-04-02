@@ -1,13 +1,16 @@
 package de.d3v0.peb.common.dbhelper;
 
-import java.io.FileNotFoundException;
-import java.lang.reflect.Constructor;
-import java.sql.*;
-import java.util.concurrent.locks.ReentrantLock;
-
 import de.d3v0.peb.common.BackupFile;
 import de.d3v0.peb.common.Properties;
+import de.d3v0.peb.common.misc.TargetTransferException;
 import de.d3v0.peb.controller.TargetHandler;
+
+import java.io.FileNotFoundException;
+import java.lang.reflect.Constructor;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class DbHelper
 {
@@ -55,7 +58,7 @@ public abstract class DbHelper
         insertStatement = con.prepareStatement("insert into entry (path, lastMod, lastSeen, lastBackup, Size) VALUES(?, ?, ?, ?, ?)");
     }
 
-    public void commit() throws SQLException, FileNotFoundException, TargetHandler.TargetTransferException
+    public void commit() throws SQLException, FileNotFoundException, TargetTransferException
     {
         con.commit();
         con.close();

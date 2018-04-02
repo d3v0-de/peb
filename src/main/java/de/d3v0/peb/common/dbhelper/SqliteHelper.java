@@ -1,9 +1,13 @@
 package de.d3v0.peb.common.dbhelper;
 
+import de.d3v0.peb.common.BackupFile;
 import de.d3v0.peb.common.Logger;
-import de.d3v0.peb.controller.TargetHandler;
+import de.d3v0.peb.common.misc.TargetTransferException;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -48,7 +52,7 @@ public class SqliteHelper extends DbHelper
             if (db.exists())
                 db.delete();
             FileOutputStream fos = new FileOutputStream(db);
-            targetHandler.restoreFile(DatabaseFileName, fos);
+            targetHandler.restoreFile(new BackupFile(DatabaseFileName, fos));
         } catch (Exception e)
         {
             Logger.log(e);
@@ -64,11 +68,11 @@ public class SqliteHelper extends DbHelper
     private final String DatabaseFileName = "fastbackup.db";
 
     @Override
-    public void commit() throws SQLException, FileNotFoundException, TargetHandler.TargetTransferException
+    public void commit() throws SQLException, FileNotFoundException, TargetTransferException
     {
         super.commit();
         File db = new File(getDatabaseLocalPath());
         FileInputStream fis = new FileInputStream(db);
-        targetHandler.backupFile(fis, DatabaseFileName);
+        targetHandler.backupFile(new BackupFile(DatabaseFileName, fis));
     }
 }

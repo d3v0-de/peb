@@ -3,15 +3,20 @@ package de.d3v0.peb.controller;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 import de.d3v0.peb.common.*;
-import de.d3v0.peb.common.Properties;
+import de.d3v0.peb.common.dbhelper.DbHelper;
+import de.d3v0.peb.common.misc.LogSeverity;
+import de.d3v0.peb.common.misc.TargetTransferException;
 import de.d3v0.peb.common.sourceproperties.Filter.BackupFilter;
 import de.d3v0.peb.common.sourceproperties.SourceProperties;
-import de.d3v0.peb.common.dbhelper.DbHelper;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class MainHandler implements Runnable
@@ -60,12 +65,13 @@ public class MainHandler implements Runnable
         prop = (Properties)xs.fromXML(is);
     }
 
-    protected void BackupConfig() throws IOException, TargetHandler.TargetTransferException
+    protected void BackupConfig() throws IOException, TargetTransferException
     {
         XStream xs = new XStream(new DomDriver());
         StringOutputStream sos = new StringOutputStream();
         xs.toXML(prop, sos);
-        targetHandlerManager.backupFile(sos.getInputStream(), "properties.xml");
+        BackupFile f = new BackupFile("properties.xml", sos.getInputStream());
+        targetHandlerManager.backupFile(f);
     }
 
     public void SaveConfig() throws IOException
@@ -139,13 +145,13 @@ public class MainHandler implements Runnable
 
         if (!f.canRead())
         {
-            Logger.log(Logger.LogSeverity.Warn,"File/Folder '" + f.getAbsolutePath() + "' is not accessible");
+            Logger.log(LogSeverity.Warn,"File/Folder '" + f.getAbsolutePath() + "' is not accessible");
             return;
         }
 
         if (Files.isSymbolicLink(f.toPath()))
         {
-            Logger.log(Logger.LogSeverity.Warn, "File/Folder '" + f.getAbsolutePath() + "' is a symbolic link - I don't follow (and don't save as well)");
+            Logger.log(LogSeverity.Warn, "File/Folder '" + f.getAbsolutePath() + "' is a symbolic link - I don't follow (and don't save as well)");
             return;
         }
 
@@ -162,7 +168,7 @@ public class MainHandler implements Runnable
                 rows = dbHelper.Update(bf, targetHandlerManager.getPerfDate());
             } catch (SQLException e)
             {
-                Logger.log(LoggerBase.LogSeverity.Error, "Error Updating LastSeen for file " + bf.Path);
+                Logger.log(LogSeverity.Error, "Error Updating LastSeen for file " + bf.Path);
                 Logger.log(e);
             }
 
@@ -188,18 +194,18 @@ public class MainHandler implements Runnable
                     if (filter.match(bf))
                     {
                         matched = true;
-                        Logger.log(Logger.LogSeverity.Debug,"Backlist " + filter.getInfo() + "matched for " + bf.Path);
+                        Logger.log(LogSeverity.Debug,"Backlist " + filter.getInfo() + "matched for " + bf.Path);
                         break;
                     }
                     if (!matched)
                     {
-                        Logger.log(Logger.LogSeverity.Debug,"No Whitelist matched for " + bf.Path);
+                        Logger.log(LogSeverity.Debug,"No Whitelist matched for " + bf.Path);
                         return true;
                     }
             }
             else
             {
-                Logger.log(LoggerBase.LogSeverity.Error, "Invalid value " + source.filterMode + " for SourceProperties.FilterMode");
+                Logger.log(LogSeverity.Error, "Invalid value " + source.filterMode + " for SourceProperties.FilterMode");
             }
         return false;
     }
@@ -308,7 +314,7 @@ public class MainHandler implements Runnable
 
         try
         {
-            targetHandler.backupFile(f.getReadStream(), f.Path);
+            targetHandler.backupFile(f);
             lockTransferDoneQueue.lock();
             transferDoneQueue.add(f);
             lockTransferDoneQueue.unlock();
@@ -316,7 +322,7 @@ public class MainHandler implements Runnable
             transferVolumeDone += f.Size;
         } catch (Exception e)
         {
-            LoggerBase.log(LoggerBase.LogSeverity.Error, "Error for file " + f.Path);
+            LoggerBase.log(LogSeverity.Error, "Error for file " + f.Path);
             LoggerBase.log(e);
         }
     }

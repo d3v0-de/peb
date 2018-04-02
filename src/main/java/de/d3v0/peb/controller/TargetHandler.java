@@ -2,8 +2,11 @@ package de.d3v0.peb.controller;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
+import de.d3v0.peb.common.BackupFile;
 import de.d3v0.peb.common.Logger;
 import de.d3v0.peb.common.StringOutputStream;
+import de.d3v0.peb.common.misc.BackupNotFoundException;
+import de.d3v0.peb.common.misc.TargetTransferException;
 import de.d3v0.peb.common.targetproperties.TargetProperties;
 
 import java.io.*;
@@ -12,44 +15,16 @@ import java.lang.reflect.InvocationTargetException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Hashtable;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class TargetHandler implements Closeable
 {
-    public class TargetTransferException extends Exception
-    {
-        public TargetTransferException(String var1) {
-            super(var1);
-        }
-
-        public TargetTransferException(String var1, Throwable var2) {
-            super(var1, var2);
-        }
-
-        public TargetTransferException(Throwable var1) {
-            super(var1);
-        }
-
-    }
-
-    public class BackupNotFoundException extends Exception
-    {
-        public BackupNotFoundException(String var1) {
-            super(var1);
-        }
-
-        public BackupNotFoundException(String var1, Throwable var2) {
-            super(var1, var2);
-        }
-
-        public BackupNotFoundException(Throwable var1) {
-            super(var1);
-        }
-    }
-
-
     private List<Long> backupDates;
     TargetProperties props;
+    protected static Hashtable<String, ReentrantLock> dirCreated = new Hashtable<>();
+    protected static ReentrantLock dirCreatedLock = new ReentrantLock();
 
     public long getPerfDate()
     {
@@ -98,27 +73,29 @@ public abstract class TargetHandler implements Closeable
         writeFile(sos.getInputStream(), props.BasePath + getSeparator() + "backups.xml");
     }
 
-    abstract void readFile(String path, OutputStream dst) throws BackupNotFoundException, TargetTransferException;
-    abstract void writeFile(InputStream src, String path) throws TargetTransferException;
+    protected abstract void readFile(String path, OutputStream dst) throws BackupNotFoundException, TargetTransferException;
+    protected abstract void writeFile(InputStream src, String path) throws TargetTransferException;
+    protected abstract void createFolderInt(String path, boolean checkFolderexists ) throws TargetTransferException;
 
-    public void restoreFile(String relativePath, OutputStream os) throws BackupNotFoundException, TargetTransferException
+    public void restoreFile(BackupFile file) throws BackupNotFoundException, TargetTransferException, FileNotFoundException
     {
         if (getBackupDates() != null && getBackupDates().size()!= 0)
-            restoreFile(relativePath, os, getBackupDates().get(getBackupDates().size() -1));
+            restoreFile(file, getBackupDates().get(getBackupDates().size() -1));
         else throw new BackupNotFoundException("no Backup existing yet");
     }
-    public void restoreFile(String relativePath, OutputStream os, long backupDate) throws BackupNotFoundException, TargetTransferException
+    public void restoreFile(BackupFile file, long backupDate) throws BackupNotFoundException, TargetTransferException, FileNotFoundException
     {
-        readFile(getBackupPath(relativePath, backupDate), os);
+        readFile(getBackupPath(file, backupDate, false), file.getWriteStream());
     }
 
-    protected void backupFile(InputStream src, String relativePath, long backupDate) throws TargetTransferException
+    protected void backupFile(BackupFile file, long backupDate) throws TargetTransferException, FileNotFoundException
     {
-        writeFile(src, getBackupPath(relativePath, backupDate));
+        writeFile(file.getReadStream(), getBackupPath(file, backupDate, true));
     }
-    public void backupFile(InputStream src, String relativePath) throws TargetTransferException
+
+    public void backupFile(BackupFile file) throws TargetTransferException, FileNotFoundException
     {
-        backupFile(src, relativePath, this.perfDate);
+        backupFile(file, this.perfDate);
     }
 
 
@@ -150,13 +127,68 @@ public abstract class TargetHandler implements Closeable
         }
     }
 
-    protected String getBackupPath(String srcPath, long backupDate)
+    protected void createFolderParent(String relativePath) throws TargetTransferException
+    {
+        StringBuilder currentPath = new StringBuilder();
+        for (String f: relativePath.split(getSeparator()))
+        {
+            ReentrantLock l = null;
+            currentPath.append(f);
+            try
+            {
+                dirCreatedLock.lock();
+                if (dirCreated.containsKey(currentPath.toString()))
+                {
+                    l = dirCreated.get(currentPath.toString());
+                    // wait for folder to be created
+                    if (l != null)
+                    {
+                        l.wait();
+                        l = null;
+                    }
+                }
+                else
+                {
+                    l = new ReentrantLock();
+                    l.lock();
+                    dirCreated.put(currentPath.toString(), l);
+                }
+                dirCreatedLock.unlock();
+
+                if (l != null)
+                {
+                    boolean checkFolderexists = props.BasePath.contains(currentPath.toString());
+                    createFolderInt(currentPath.toString(), checkFolderexists);
+                }
+
+
+            } catch (TargetTransferException e)
+            {
+                throw e;
+            } catch (InterruptedException e)
+            {
+            } finally
+            {
+                l.unlock();
+            }
+
+            currentPath.append(getSeparator());
+        }
+    }
+
+    protected String getBackupPath(BackupFile file, long backupDate, boolean createFolder) throws TargetTransferException
     {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH_mm_ss");
+        String srcPath = file.Path;
         if (!srcPath.startsWith(getSeparator()))
             srcPath = getSeparator() + srcPath;
 
-        return props.BasePath + getSeparator() + sdf.format(new Date(backupDate)) + srcPath;
+        String filePath = props.BasePath + getSeparator() + sdf.format(new Date(backupDate)) + srcPath;
+        filePath = filePath.replace(file.Separator, getSeparator());
+        String folderPath = filePath.substring(0, filePath.lastIndexOf(getSeparator()));
+        if (createFolder)
+            createFolderParent(folderPath);
+        return filePath;
     }
 
     protected String getSeparator()

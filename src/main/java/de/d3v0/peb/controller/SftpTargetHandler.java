@@ -4,20 +4,17 @@ import com.jcraft.jsch.*;
 import de.d3v0.peb.common.Logger;
 import de.d3v0.peb.common.LoggerBase;
 import de.d3v0.peb.common.StringOutputStream;
+import de.d3v0.peb.common.misc.LogSeverity;
+import de.d3v0.peb.common.misc.TargetTransferException;
 import de.d3v0.peb.common.targetproperties.SftpTargetProperties;
-import sun.rmi.runtime.Log;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Calendar;
-import java.util.Date;
 
 public class SftpTargetHandler extends TargetHandler
 {
 
     private ChannelSftp sftp;
-    private Session ssh_ses;
 
     private SftpTargetProperties props()
     {
@@ -54,25 +51,18 @@ public class SftpTargetHandler extends TargetHandler
                 {
                     JSch jsch = new JSch();
                     Session session = jsch.getSession(props().UserName, props().HostName);
+                    session.setDaemonThread(true);
                     session.setPassword(props().Password);
                     session.setHostKeyRepository(getHostkeyRepository());
                     session.connect();
                     session.setDaemonThread(true);
                     ChannelSftp lsftp = (ChannelSftp) session.openChannel("sftp");
                     lsftp.connect();
-
-                    JSch jsch2 = new JSch();
-                    ssh_ses = jsch.getSession(props().UserName, props().HostName);
-                    ssh_ses.setPassword(props().Password);
-                    ssh_ses.setHostKeyRepository(getHostkeyRepository());
-                    ssh_ses.setDaemonThread(true);
-                    ssh_ses.connect();
-
                     this.sftp = lsftp;
                     return;
                 } catch (JSchException ex)
                 {
-                    LoggerBase.log(LoggerBase.LogSeverity.Warn, ex);
+                    LoggerBase.log(LogSeverity.Warn, ex);
                 }
             }
             if (sftp == null)
@@ -86,9 +76,6 @@ public class SftpTargetHandler extends TargetHandler
         try
         {
             getChannelSftp();
-            path = path.replace('\\', '/');
-            String folderPath = path.substring(0, path.lastIndexOf("/"));
-            createFolder(folderPath);
             sftp.put(src, path);
         } catch (SftpException ex)
         {
@@ -100,33 +87,33 @@ public class SftpTargetHandler extends TargetHandler
         }
     }
 
-
-    private void createFolder(String folderPath)
+    protected void createFolderInt(String folderPath, boolean checkFolderExists)
     {
         StringOutputStream sb = new StringOutputStream();
         StringBuilder outputBuffer = new StringBuilder();
         try
         {
-            ChannelExec ssh = (ChannelExec )ssh_ses.openChannel("exec");
-            ssh.setCommand("mkdir -p '" + folderPath + "'");
-            ssh.setErrStream(sb);
-            InputStream commandOutput = ssh.getInputStream();
-            ssh.connect();
-            int readByte = commandOutput.read();
-
-            while(readByte != 0xffffffff)
-            {
-                outputBuffer.append((char)readByte);
-                readByte = commandOutput.read();
-            }
-            ssh.disconnect();
+            if (checkFolderExists == false || folderExists(folderPath) == false)
+                sftp.mkdir(folderPath);
         }
         catch(Exception ex)
         {
-            Logger.log(LoggerBase.LogSeverity.Error, "Error creating folder " + folderPath);
+            Logger.log(LogSeverity.Error, "Error creating folder " + folderPath);
             Logger.log(ex);
         }
+    }
 
+    private boolean folderExists(String path)
+    {
+        try
+        {
+            sftp.cd(path);
+            return true;
+        }
+        catch (SftpException e)
+        {
+            return false;
+        }
     }
 
     private static HostKeyRepository getHostkeyRepository()
@@ -181,11 +168,10 @@ public class SftpTargetHandler extends TargetHandler
     {
         try
         {
-            ssh_ses.disconnect();
             sftp.getSession().disconnect();
         } catch (JSchException e)
         {
-            Logger.log(LoggerBase.LogSeverity.Error, "Error closing connection");
+            Logger.log(LogSeverity.Error, "Error closing connection");
             Logger.log(e);
         }
     }

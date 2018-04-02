@@ -1,19 +1,13 @@
 package de.d3v0.peb.common;
 
 
-import java.io.IOException;
+import de.d3v0.peb.common.misc.LogSeverity;
+
 import java.io.PrintStream;
 import java.util.Date;
 
 public abstract class LoggerBase
 {
-    public enum LogSeverity
-    {
-        Debug,
-        Warn,
-        Error,
-        Fatal;
-    }
 
     public LogSeverity logSeverity = LogSeverity.Debug;
 
