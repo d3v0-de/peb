@@ -43,26 +43,41 @@ public class SftpTargetHandler extends TargetHandler
         return path.replace('\\', '/');
     }
 
-    protected void getChannelSftp() throws JSchException
+    protected void getChannelSftp() throws TargetTransferException
     {
+        int retry = 2;
         if (sftp == null)
         {
-            JSch jsch = new JSch();
-            Session session = jsch.getSession(props().UserName, props().HostName);
-            session.setPassword(props().Password);
-            session.setHostKeyRepository(getHostkeyRepository());
-            session.connect();
-            session.setDaemonThread(true);
-            sftp = (ChannelSftp) session.openChannel("sftp");
-            sftp.connect();
+            for (int i=0; i<retry; i++)
+            {
+                try
+                {
+                    JSch jsch = new JSch();
+                    Session session = jsch.getSession(props().UserName, props().HostName);
+                    session.setPassword(props().Password);
+                    session.setHostKeyRepository(getHostkeyRepository());
+                    session.connect();
+                    session.setDaemonThread(true);
+                    ChannelSftp lsftp = (ChannelSftp) session.openChannel("sftp");
+                    lsftp.connect();
 
-            JSch jsch2 = new JSch();
-            ssh_ses = jsch.getSession(props().UserName, props().HostName);
-            ssh_ses.setPassword(props().Password);
-            ssh_ses.setHostKeyRepository(getHostkeyRepository());
-            ssh_ses.setDaemonThread(true);
-            ssh_ses.connect();
-        }
+                    JSch jsch2 = new JSch();
+                    ssh_ses = jsch.getSession(props().UserName, props().HostName);
+                    ssh_ses.setPassword(props().Password);
+                    ssh_ses.setHostKeyRepository(getHostkeyRepository());
+                    ssh_ses.setDaemonThread(true);
+                    ssh_ses.connect();
+
+                    this.sftp = lsftp;
+                    return;
+                } catch (JSchException ex)
+                {
+                    LoggerBase.log(LoggerBase.LogSeverity.Warn, ex);
+                }
+            }
+            if (sftp == null)
+                throw new TargetTransferException("Failed to connect after " + retry + " tries");
+         }
     }
 
     protected void writeFile(InputStream src, String path) throws TargetTransferException
@@ -75,10 +90,13 @@ public class SftpTargetHandler extends TargetHandler
             String folderPath = path.substring(0, path.lastIndexOf("/"));
             createFolder(folderPath);
             sftp.put(src, path);
-        } catch (Exception ex)
+        } catch (SftpException ex)
         {
             Logger.log(ex);
             throw new TargetTransferException("Error writing file " + path);
+        } catch (TargetTransferException e)
+        {
+            throw e;
         }
     }
 
