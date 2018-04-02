@@ -1,4 +1,4 @@
-package de.d3v0.peb.controller;
+package de.d3v0.peb.controller.Target;
 
 import com.jcraft.jsch.*;
 import de.d3v0.peb.common.Logger;
@@ -7,6 +7,7 @@ import de.d3v0.peb.common.StringOutputStream;
 import de.d3v0.peb.common.misc.LogSeverity;
 import de.d3v0.peb.common.misc.TargetTransferException;
 import de.d3v0.peb.common.targetproperties.SftpTargetProperties;
+import de.d3v0.peb.controller.Target.TargetHandler;
 
 import java.io.InputStream;
 import java.io.OutputStream;

@@ -3,7 +3,7 @@ package de.d3v0.peb.common.dbhelper;
 import de.d3v0.peb.common.BackupFile;
 import de.d3v0.peb.common.Properties;
 import de.d3v0.peb.common.misc.TargetTransferException;
-import de.d3v0.peb.controller.TargetHandler;
+import de.d3v0.peb.controller.Target.TargetHandler;
 
 import java.io.FileNotFoundException;
 import java.lang.reflect.Constructor;

@@ -1,4 +1,4 @@
-package de.d3v0.peb.controller;
+package de.d3v0.peb.controller.Target;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Hashtable;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class TargetHandler implements Closeable
 {
@@ -134,7 +133,7 @@ public abstract class TargetHandler implements Closeable
         {
             if (f == "")
                 continue;
-            
+
             currentPath.append(f);
             MyBoolean exists = null;
             synchronized (dirCreated)

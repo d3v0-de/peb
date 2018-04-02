@@ -1,6 +1,6 @@
 package de.d3v0.peb.common.targetproperties;
 
-import de.d3v0.peb.controller.SftpTargetHandler;
+import de.d3v0.peb.controller.Target.SftpTargetHandler;
 
 public class SftpTargetProperties extends TargetProperties
 {

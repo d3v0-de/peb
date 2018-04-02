@@ -8,6 +8,7 @@ import de.d3v0.peb.common.misc.LogSeverity;
 import de.d3v0.peb.common.misc.TargetTransferException;
 import de.d3v0.peb.common.sourceproperties.Filter.BackupFilter;
 import de.d3v0.peb.common.sourceproperties.SourceProperties;
+import de.d3v0.peb.controller.Target.TargetHandler;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -17,7 +18,6 @@ import java.nio.file.Files;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class MainHandler implements Runnable
 {
@@ -28,9 +28,6 @@ public class MainHandler implements Runnable
 
     private static final String  ThreadNameReadTransferQueue = "readTransferQueue";
     private static final String  ThreadNamedDWorker = "dbWorker";
-    
-    ReentrantLock lockTransferQueue = new ReentrantLock();
-    ReentrantLock lockTransferDoneQueue = new ReentrantLock();
 
     private List<BackupFile> transferQueue;
     private List<BackupFile> transferDoneQueue;
@@ -212,9 +209,10 @@ public class MainHandler implements Runnable
 
     private void enqueueTransfer(BackupFile f)
     {
-        lockTransferQueue.lock();
-        transferQueue.add(f);
-        lockTransferQueue.unlock();
+        synchronized (transferQueue)
+        {
+            transferQueue.add(f);
+        }
         transferCountTotal++;
         transferVolumeTotal += f.Size;
     }
@@ -234,13 +232,14 @@ public class MainHandler implements Runnable
         while (fillTransferQueueFinished == false || transferQueue.size() > 0)
             {
                 BackupFile f = null;
-                lockTransferQueue.lock();
-                if (transferQueue.size() > 0)
+                synchronized (transferQueue)
                 {
-                    f = transferQueue.get(0);
-                    transferQueue.remove(0);
+                    if (transferQueue.size() > 0)
+                    {
+                        f = transferQueue.get(0);
+                        transferQueue.remove(0);
+                    }
                 }
-                lockTransferQueue.unlock();
                 if (f != null)
                     processContent(f, targetHandler);
                 else
@@ -270,21 +269,22 @@ public class MainHandler implements Runnable
         while (shouldRun)
         {
             BackupFile f = null;
-            lockTransferDoneQueue.lock();
-            if (transferDoneQueue.size() > 0)
+            synchronized (transferDoneQueue)
             {
-                f = transferDoneQueue.get(0);
-                transferDoneQueue.remove(0);
+                if (transferDoneQueue.size() > 0)
+                {
+                    f = transferDoneQueue.get(0);
+                    transferDoneQueue.remove(0);
+                } else
+                {
+                    synchronized (transferQueue)
+                    {
+                        // finished
+                        if (transferQueue.size() == 0)
+                            shouldRun = false;
+                    }
+                }
             }
-            else
-            {
-                lockTransferQueue.lock();
-                // finished
-                if (transferQueue.size() == 0)
-                    shouldRun = false;
-                lockTransferQueue.unlock();
-            }
-            lockTransferDoneQueue.unlock();
             if (f != null)
             {
                 try
@@ -315,9 +315,10 @@ public class MainHandler implements Runnable
         try
         {
             targetHandler.backupFile(f);
-            lockTransferDoneQueue.lock();
-            transferDoneQueue.add(f);
-            lockTransferDoneQueue.unlock();
+            synchronized (transferDoneQueue)
+            {
+                transferDoneQueue.add(f);
+            }
             transferCountDone++;
             transferVolumeDone += f.Size;
         } catch (Exception e)
