@@ -9,7 +9,7 @@ public class DirectotyFilter extends BackupFilter
     @Override
     protected boolean matchFile(BackupFile file)
     {
-        return file.Path.startsWith(Directory);
+        return file.PathSource.startsWith(Directory);
     }
 
     @Override

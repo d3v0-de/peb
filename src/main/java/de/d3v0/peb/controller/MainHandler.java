@@ -1,20 +1,16 @@
 package de.d3v0.peb.controller;
 
-import com.thoughtworks.xstream.XStream;
-import com.thoughtworks.xstream.io.xml.DomDriver;
 import de.d3v0.peb.common.*;
 import de.d3v0.peb.common.dbhelper.DbHelper;
 import de.d3v0.peb.common.misc.LogSeverity;
 import de.d3v0.peb.common.misc.TargetTransferException;
 import de.d3v0.peb.common.sourceproperties.Filter.BackupFilter;
 import de.d3v0.peb.common.sourceproperties.SourceProperties;
-import de.d3v0.peb.controller.Target.TargetHandler;
+import de.d3v0.peb.controller.IO.FileHandler;
+import de.d3v0.peb.controller.IO.IOHandler;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,67 +19,28 @@ public class MainHandler implements Runnable
 {
 
     private Properties prop;
-    private TargetHandler targetHandlerManager;
+    private IOHandler targetHandlerManager;
     private DbHelper dbHelper;
+    private boolean createNew;
 
     private static final String  ThreadNameReadTransferQueue = "readTransferQueue";
     private static final String  ThreadNamedDWorker = "dbWorker";
 
-    private List<BackupFile> transferQueue;
-    private List<BackupFile> transferDoneQueue;
+    private final List<BackupFile> transferQueue;
+    private final List<BackupFile> transferDoneQueue;
+    private final List<BackupFile> transferInWorkList;
 
-
-    private long transferCountTotal = 0;
-    private long transferCountDone = 0;
-    private long transferVolumeTotal = 0;
-    private long transferVolumeDone = 0;
     private boolean fillTransferQueueFinished = false;
 
-    public MainHandler(String workingDir) throws IOException, ClassNotFoundException
+    public MainHandler(String workingDir, boolean createNew) throws IOException, ClassNotFoundException
     {
-        ReadConfig(workingDir);
-        transferQueue = new ArrayList<BackupFile>();
-        transferDoneQueue = new ArrayList<BackupFile>();
+        this.prop = Properties.ReadConfig(workingDir);
+        this.createNew = createNew;
+        transferQueue = new ArrayList<>();
+        transferDoneQueue = new ArrayList<>();
+        transferInWorkList  = new ArrayList<>();
     }
 
-    private static File getPropertiesFile(String workingDir) throws IOException
-    {
-        File res = new File(workingDir + File.separator + "properties.xml");
-        if (!res.exists())
-            if (!res.createNewFile())
-                throw new IOException("failed to create props");
-        return res;
-    }
-
-    protected void ReadConfig(String workingDir) throws IOException, ClassNotFoundException
-    {
-        XStream xs = new XStream(new DomDriver());
-        FileInputStream is = new FileInputStream(getPropertiesFile(workingDir));
-        prop = (Properties)xs.fromXML(is);
-    }
-
-    protected void BackupConfig() throws IOException, TargetTransferException
-    {
-        XStream xs = new XStream(new DomDriver());
-        StringOutputStream sos = new StringOutputStream();
-        xs.toXML(prop, sos);
-        BackupFile f = new BackupFile("properties.xml", sos.getInputStream());
-        targetHandlerManager.backupFile(f);
-    }
-
-    public void SaveConfig() throws IOException
-    {
-        SaveConfig(prop);
-    }
-
-    public static void SaveConfig(Properties p) throws IOException
-    {
-        FileOutputStream fout = new FileOutputStream(getPropertiesFile(p.workingDir));
-
-        XStream xs = new XStream(new DomDriver());
-        xs.toXML(p, fout);
-        fout.close();
-    }
 
     public void performBackup()
     {
@@ -91,40 +48,44 @@ public class MainHandler implements Runnable
         mainWorker.start();
     }
 
-    private void performBackupInt()
+    private void t1_performBackupInt()
     {
         try
         {
-            targetHandlerManager = TargetHandler.create(prop.targetProperties);
-            dbHelper = DbHelper.Create(prop, targetHandlerManager);
             Logger.CreateDefault(prop.workingDir + File.separator + "peb.log");
+            targetHandlerManager = IOHandler.create(prop.targetProperties, true);
+            dbHelper = DbHelper.Create(prop, targetHandlerManager, this.createNew);
 
-            BackupConfig();
-            startTranserQueue();
+            t1_startTransferQueue();
 
             for (SourceProperties source : prop.sourceProperties)
             {
-                File f = new File(source.Path);
+                IOHandler sourceHandler = IOHandler.create(source.IOProperties, false);
                 try
                 {
-                    processFile(f, source);
-                    fillTransferQueueFinished = true;
-                    readTransferDoneQueue();
-                    dbHelper.commit();
-                    targetHandlerManager.saveBackupDates();
-                    targetHandlerManager.close();
+                    t1_processSourceFile(sourceHandler.getFileInfo(source.IOProperties.BasePath, true), source);
                 } catch (Exception e)
                 {
                     Logger.log(e);
                 }
+
             }
+
+            fillTransferQueueFinished = true;
+            t1_readTransferDoneQueue();
+            Logger.log(LogSeverity.Info, dbHelper.GetStats(targetHandlerManager.getPerfDate()));
+            IOHandler.logStats();
+            dbHelper.commit();
+            backupConfig();
+            targetHandlerManager.saveBackupDates();
+            targetHandlerManager.close();
         } catch (Exception ex)
         {
             Logger.log(ex);
         }
     }
 
-    private void startTranserQueue()
+    private void t1_startTransferQueue()
     {
         for (int i=0 ; i< prop.targetProperties.WorkerThreadCount ; i++)
         {
@@ -133,29 +94,18 @@ public class MainHandler implements Runnable
         }
     }
 
-    private void processFile(File f, SourceProperties source)
-    {
-        BackupFile bf = new BackupFile(f);
+    private void t1_processSourceFile(BackupFile bf, SourceProperties source) throws TargetTransferException {
 
-        if (filter(source, bf))
+
+
+        if (t1_filter(source, bf))
             return;
 
-        if (!f.canRead())
-        {
-            Logger.log(LogSeverity.Warn,"File/Folder '" + f.getAbsolutePath() + "' is not accessible");
-            return;
-        }
 
-        if (Files.isSymbolicLink(f.toPath()))
+        if (bf.type == BackupFile.FileType.Directory)
         {
-            Logger.log(LogSeverity.Warn, "File/Folder '" + f.getAbsolutePath() + "' is a symbolic link - I don't follow (and don't save as well)");
-            return;
-        }
-
-        if (f.isDirectory())
-        {
-            for (File child : f.listFiles())
-                    processFile(child, source);
+            for (BackupFile child : bf.listChildren())
+                    t1_processSourceFile(child, source);
         } else
         {
 
@@ -165,17 +115,17 @@ public class MainHandler implements Runnable
                 rows = dbHelper.Update(bf, targetHandlerManager.getPerfDate());
             } catch (SQLException e)
             {
-                Logger.log(LogSeverity.Error, "Error Updating LastSeen for file " + bf.Path);
+                Logger.log(LogSeverity.Error, "Error Updating LastSeen for file " + bf.PathSource);
                 Logger.log(e);
             }
 
             // Update didn't match (the file in it's current version has not already been backuped ==> make Backup
             if (rows == 0)
-                enqueueTransfer(bf);
+                t1_enqueueTransfer(bf);
         }
     }
 
-    private boolean filter(SourceProperties source, BackupFile bf)
+    private boolean t1_filter(SourceProperties source, BackupFile bf)
     {
         if (source.Filters != null)
             if (source.filterMode == SourceProperties.FilterMode.Blacklist )
@@ -191,12 +141,12 @@ public class MainHandler implements Runnable
                     if (filter.match(bf))
                     {
                         matched = true;
-                        Logger.log(LogSeverity.Debug,"Backlist " + filter.getInfo() + "matched for " + bf.Path);
+                        Logger.log(LogSeverity.Debug,"Backlist " + filter.getInfo() + "matched for " + bf.PathSource);
                         break;
                     }
                     if (!matched)
                     {
-                        Logger.log(LogSeverity.Debug,"No Whitelist matched for " + bf.Path);
+                        Logger.log(LogSeverity.Debug,"No Whitelist matched for " + bf.PathSource);
                         return true;
                     }
             }
@@ -207,29 +157,27 @@ public class MainHandler implements Runnable
         return false;
     }
 
-    private void enqueueTransfer(BackupFile f)
+    private void t1_enqueueTransfer(BackupFile f)
     {
         synchronized (transferQueue)
         {
             transferQueue.add(f);
         }
-        transferCountTotal++;
-        transferVolumeTotal += f.Size;
     }
 
-    private void readTransferQueue()
+    private void t2_readTransferQueue()
     {
 
-        TargetHandler targetHandler = null;
+        IOHandler targetHandler = null;
         try
         {
-            targetHandler = TargetHandler.create(targetHandlerManager);
+            targetHandler = IOHandler.create(targetHandlerManager);
         } catch (Exception e)
         {
             Logger.log(e);
         }
 
-        while (fillTransferQueueFinished == false || transferQueue.size() > 0)
+        while (!fillTransferQueueFinished || transferQueue.size() > 0)
             {
                 BackupFile f = null;
                 synchronized (transferQueue)
@@ -238,10 +186,20 @@ public class MainHandler implements Runnable
                     {
                         f = transferQueue.get(0);
                         transferQueue.remove(0);
+                        synchronized (transferInWorkList)
+                        {
+                            transferInWorkList.add(f);
+                        }
                     }
                 }
                 if (f != null)
-                    processContent(f, targetHandler);
+                {
+                    backupContent(f, targetHandler);
+                    synchronized (transferInWorkList)
+                    {
+                        transferInWorkList.remove(f);
+                    }
+                }
                 else
                 {
                     try
@@ -263,7 +221,7 @@ public class MainHandler implements Runnable
         }
     }
 
-    private void readTransferDoneQueue()
+    private void t1_readTransferDoneQueue()
     {
         boolean shouldRun = true;
         while (shouldRun)
@@ -279,9 +237,12 @@ public class MainHandler implements Runnable
                 {
                     synchronized (transferQueue)
                     {
-                        // finished
-                        if (transferQueue.size() == 0)
-                            shouldRun = false;
+                        synchronized (transferInWorkList)
+                        {
+                            // finished
+                            if (transferQueue.size() == 0 && transferInWorkList.size() == 0)
+                                shouldRun = false;
+                        }
                     }
                 }
             }
@@ -309,7 +270,7 @@ public class MainHandler implements Runnable
     }
 
 
-    private void processContent(BackupFile f, TargetHandler targetHandler)
+    private void backupContent(BackupFile f, IOHandler targetHandler)
     {
 
         try
@@ -319,13 +280,17 @@ public class MainHandler implements Runnable
             {
                 transferDoneQueue.add(f);
             }
-            transferCountDone++;
-            transferVolumeDone += f.Size;
         } catch (Exception e)
         {
-            LoggerBase.log(LogSeverity.Error, "Error for file " + f.Path);
+            LoggerBase.log(LogSeverity.Error, "Error for file " + f.PathSource);
             LoggerBase.log(e);
         }
+    }
+
+    protected void backupConfig() throws IOException, TargetTransferException
+    {
+        BackupFile f = new FileHandler().getFileInfo(prop.getProertiesFilePath(), true);
+        targetHandlerManager.backupFile(f);
     }
 
 
@@ -333,8 +298,8 @@ public class MainHandler implements Runnable
     public void run()
     {
         if (Thread.currentThread().getName() == ThreadNamedDWorker)
-            performBackupInt();
+            t1_performBackupInt();
         else if (Thread.currentThread().getName() == ThreadNameReadTransferQueue)
-            readTransferQueue();
+            t2_readTransferQueue();
     }
 }

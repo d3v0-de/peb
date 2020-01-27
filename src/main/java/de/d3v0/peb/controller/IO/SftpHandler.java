@@ -1,26 +1,39 @@
-package de.d3v0.peb.controller.Target;
+package de.d3v0.peb.controller.IO;
 
 import com.jcraft.jsch.*;
+import de.d3v0.peb.common.BackupFile;
 import de.d3v0.peb.common.Logger;
 import de.d3v0.peb.common.LoggerBase;
 import de.d3v0.peb.common.StringOutputStream;
 import de.d3v0.peb.common.misc.LogSeverity;
 import de.d3v0.peb.common.misc.TargetTransferException;
-import de.d3v0.peb.common.targetproperties.SftpTargetProperties;
-import de.d3v0.peb.controller.Target.TargetHandler;
+import de.d3v0.peb.common.IOProperties.SftpHandlerProperties;
 
 import java.io.InputStream;
 import java.io.OutputStream;
 
-public class SftpTargetHandler extends TargetHandler
+public class SftpHandler extends IOHandler
 {
 
     private ChannelSftp sftp;
 
-    private SftpTargetProperties props()
+    private SftpHandlerProperties props()
     {
-        return (SftpTargetProperties) props;
+        return (SftpHandlerProperties) props;
     }
+
+    protected boolean testConnection()
+    {
+        try
+        {
+            return getSftp().isConnected();
+        } catch (Exception e) {
+            Logger.log(LogSeverity.Error, e);
+            this.sftp = null;
+            return false;
+        }
+    }
+
 
     protected void readFile(String path, OutputStream dst) throws TargetTransferException
     {
@@ -33,11 +46,6 @@ public class SftpTargetHandler extends TargetHandler
             Logger.log(e);
             throw new TargetTransferException("Error reading file " + path);
         }
-    }
-
-    protected String fixSeparators(String path)
-    {
-        return path.replace('\\', '/');
     }
 
     protected ChannelSftp getSftp() throws TargetTransferException
@@ -82,9 +90,6 @@ public class SftpTargetHandler extends TargetHandler
         {
             Logger.log(ex);
             throw new TargetTransferException("Error writing file " + path);
-        } catch (TargetTransferException e)
-        {
-            throw e;
         }
     }
 
@@ -94,7 +99,7 @@ public class SftpTargetHandler extends TargetHandler
         StringBuilder outputBuffer = new StringBuilder();
         try
         {
-            if (checkFolderExists == false || folderExists(folderPath) == false)
+            if (!checkFolderExists || !folderExists(folderPath))
                 getSftp().mkdir(folderPath);
         }
         catch(Exception ex)
@@ -102,6 +107,30 @@ public class SftpTargetHandler extends TargetHandler
             Logger.log(LogSeverity.Error, "Error creating folder " + folderPath);
             Logger.log(ex);
         }
+    }
+
+    @Override
+    public BackupFile getFileInfoInt(String path, boolean forBackup) {
+        //TODO impl:
+        return null;
+    }
+
+    @Override
+    public Iterable<? extends BackupFile> listChildren(BackupFile parent) {
+        //TODO impl:
+        return null;
+    }
+
+    @Override
+    protected InputStream getReadStream(String path) throws TargetTransferException {
+        //TODO impl:
+        return null;
+    }
+
+    @Override
+    protected OutputStream getWriteStream(String path) throws TargetTransferException {
+        //TODO impl:
+        return null;
     }
 
     private boolean folderExists(String path) throws TargetTransferException

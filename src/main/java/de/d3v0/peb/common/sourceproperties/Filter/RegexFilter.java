@@ -10,11 +10,11 @@ public class RegexFilter extends BackupFilter
     protected boolean matchFile(BackupFile file)
     {
         int debug = 0;
-        if (file.Path.contains(Pattern))
+        if (file.PathSource.contains(Pattern))
             debug++;
 
-        boolean res  = file.Path.matches(Pattern);
-        if (res == true)
+        boolean res  = file.PathSource.matches(Pattern);
+        if (res)
             debug++;
         return res;
     }

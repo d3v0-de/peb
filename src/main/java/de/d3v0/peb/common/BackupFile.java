@@ -1,56 +1,38 @@
 package de.d3v0.peb.common;
 
-import java.io.*;
-import java.util.Date;
+import de.d3v0.peb.common.misc.TargetTransferException;
+import de.d3v0.peb.controller.IO.IOHandler;
 
 public class BackupFile
 {
-    public String Path;
+    public String PathSource;
+    public String PathBackupTarget;
     public long Size;
     public long LastModified;
+    public FileType type = FileType.undefined;
     public String Separator;
-    private InputStream inStream;
-    private OutputStream outStream;
+    private final IOHandler ioHandler;
 
-    public BackupFile(File file)
+
+    public BackupFile(IOHandler ioHandler, String path)
     {
-        this.Path = file.getAbsolutePath();
-        this.Size = file.length();
-        this.LastModified = file.lastModified();
-        this.Separator = File.separator;
+        this.ioHandler = ioHandler;
+        ioHandler.setPath(this, path);
     }
 
-    public BackupFile(String path, InputStream stream)
-    {
-        this.Path = path;
-        this.Size = 0;
-        this.LastModified = new Date().getTime();
-        this.Separator = File.separator;
-        this.inStream = stream;
+    public Iterable<? extends BackupFile> listChildren() throws TargetTransferException {
+        return this.ioHandler.listChildren(this);
     }
 
-    public BackupFile(String path, OutputStream stream)
-    {
-        this.Path = path;
-        this.Size = 0;
-        this.LastModified = new Date().getTime();
-        this.Separator = File.separator;
-        this.outStream = stream;
+    public IOHandler getIOHandler() {
+        return this.ioHandler;
     }
 
-    public InputStream getReadStream() throws FileNotFoundException
+    public enum FileType
     {
-        if (inStream != null)
-            return inStream;
-        else
-            return new FileInputStream(Path);
-    }
-
-    public OutputStream getWriteStream() throws FileNotFoundException
-    {
-        if (outStream != null)
-            return outStream;
-        else
-            return new FileOutputStream(Path);
+        File,
+        Directory,
+        Symlink,
+        undefined
     }
 }

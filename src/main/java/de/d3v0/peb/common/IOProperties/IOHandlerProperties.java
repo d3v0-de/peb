@@ -1,13 +1,13 @@
-package de.d3v0.peb.common.targetproperties;
+package de.d3v0.peb.common.IOProperties;
 
 
-public abstract class TargetProperties
+public abstract class IOHandlerProperties
 {
     public String BasePath;
     public int WorkerThreadCount;
     public abstract String getHandlerClassname();
 
-    public TargetProperties()
+    public IOHandlerProperties()
     {
         WorkerThreadCount = 2;
     }
