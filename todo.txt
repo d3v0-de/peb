@@ -1,0 +1,7 @@
+TODO: remove dirty fallbacks (fail on retrieve backuplist, db, config)
+      and the other way around (use left over Db on reinit)
+
+TODO: - Verify BackupConsistency (stats?)
+
+TODO: firstRun-Logic (backup after finally written?)
+TODO: improve Logging (start, stop, stat, found backup, thread start, end, etc)

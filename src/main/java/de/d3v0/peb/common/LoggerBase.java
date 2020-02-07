@@ -3,6 +3,9 @@ package de.d3v0.peb.common;
 
 import de.d3v0.peb.common.misc.LogSeverity;
 
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.util.Date;
 
@@ -16,8 +19,15 @@ public abstract class LoggerBase
     protected static LoggerBase getInstance()
     {
         if (instance == null)
-            instance = new Logger();
+            instance = new ConsoleLog();
         return instance;
+    }
+
+    protected abstract InputStream getReadStream_int() throws  Exception;
+
+    public static InputStream getReadStream() throws Exception
+    {
+        return getInstance().getReadStream_int();
     }
 
     protected abstract void log_int(Date date, LogSeverity sev, String message) throws Exception;

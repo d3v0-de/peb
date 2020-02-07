@@ -4,7 +4,7 @@ import de.d3v0.peb.common.BackupFile;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPSClient;
 import org.apache.commons.net.ftp.FTPClient;
-import de.d3v0.peb.common.Logger;
+import de.d3v0.peb.common.FileLogger;
 import de.d3v0.peb.common.LoggerBase;
 import de.d3v0.peb.common.misc.LogSeverity;
 import de.d3v0.peb.common.misc.TargetTransferException;
@@ -33,18 +33,23 @@ public class FtpHandler extends IOHandler
             {
                 try
                 {
-                    //TODO: implement Plain, implicit
-                    ftpClient = new FTPSClient();
+                    if (props().ftpEncryption == FtpHandlerProperties.FtpEncryption.None)
+                        ftpClient = new FTPClient();
+                    else
+                        ftpClient = new FTPSClient();
+
                     ftpClient.connect(props().HostName, props().Port);
 					ftpClient.login(props().UserName, props().Password);
                     ftpClient.enterLocalPassiveMode();
-                    ((FTPSClient)ftpClient).execPBSZ(0);
-                    ((FTPSClient)ftpClient).execPROT("P");
+                    if (props().ftpEncryption == FtpHandlerProperties.FtpEncryption.Explicit)
+                    {
+                        ((FTPSClient) ftpClient).execPBSZ(0);
+                        ((FTPSClient) ftpClient).execPROT("P");
+                    }
                     ftpClient.sendCommand("TYPE", "I");
                     ftpClient.sendCommand("MODE", "S");
                     ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
-                    //#ftpClient.setBufferSize(1024*128);
                     return ftpClient;
                 } catch (Exception ex)
                 {
@@ -74,7 +79,7 @@ public class FtpHandler extends IOHandler
         {
             return getFtp().changeWorkingDirectory(this.props.BasePath);
         } catch (Exception e) {
-            Logger.log(LogSeverity.Error, e);
+            FileLogger.log(LogSeverity.Error, e);
             this.ftpClient = null;
             return false;
         }
@@ -99,8 +104,8 @@ public class FtpHandler extends IOHandler
         }
         catch(Exception ex)
         {
-            Logger.log(LogSeverity.Error, "Error creating folder " + folderPath);
-            Logger.log(ex);
+            FileLogger.log(LogSeverity.Error, "Error creating folder " + folderPath);
+            FileLogger.log(ex);
         }
     }
 
@@ -123,7 +128,7 @@ public class FtpHandler extends IOHandler
             return new MyInputStream(getFtp().retrieveFileStream(path), this);
         } catch (IOException e)
         {
-            Logger.log(e);
+            FileLogger.log(e);
             throw new TargetTransferException("Error reading file " + path);
         }
     }
@@ -136,7 +141,7 @@ public class FtpHandler extends IOHandler
                 throw ex;
             }
         } catch (Exception e) {
-            Logger.log(e);
+            FileLogger.log(e);
             ftpClient = null;
             throw new TargetTransferException(e.getMessage());
         }
@@ -153,7 +158,7 @@ public class FtpHandler extends IOHandler
             return new MyOutputStream(getFtp().storeFileStream(file), this);
         } catch (IOException e)
         {
-            Logger.log(e);
+            FileLogger.log(e);
             throw new TargetTransferException("Error writing file " + path);
         }
     }
@@ -186,8 +191,8 @@ public class FtpHandler extends IOHandler
                 ftpClient.disconnect();
         } catch (Exception e)
         {
-            Logger.log(LogSeverity.Error, "Error closing connection");
-            Logger.log(e);
+            FileLogger.log(LogSeverity.Error, "Error closing connection");
+            FileLogger.log(e);
         }
     }
 
@@ -201,7 +206,7 @@ public class FtpHandler extends IOHandler
             this.inner = s;
             this.handler = handler;
             if (s == null)
-                Logger.log(LogSeverity.Error, "");
+                FileLogger.log(LogSeverity.Error, "");
         }
 
         @Override
@@ -230,7 +235,7 @@ public class FtpHandler extends IOHandler
             try {
                 handler.onStreamClosed();
             } catch (TargetTransferException e) {
-                Logger.log(e);
+                FileLogger.log(e);
             }
         }
     }
@@ -245,7 +250,7 @@ public class FtpHandler extends IOHandler
             this.inner = s;
             this.handler = handler;
             if (s == null)
-                Logger.log(LogSeverity.Error, "");
+                FileLogger.log(LogSeverity.Error, "");
         }
 
         @Override
@@ -266,7 +271,7 @@ public class FtpHandler extends IOHandler
             try {
                 handler.onStreamClosed();
             } catch (TargetTransferException e) {
-                Logger.log(e);
+                FileLogger.log(e);
             }
         }
     }

@@ -3,7 +3,8 @@ package de.d3v0.peb.controller.IO;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 import de.d3v0.peb.common.BackupFile;
-import de.d3v0.peb.common.Logger;
+import de.d3v0.peb.common.FileLogger;
+import de.d3v0.peb.common.LoggerBase;
 import de.d3v0.peb.common.StringOutputStream;
 import de.d3v0.peb.common.misc.*;
 import de.d3v0.peb.common.IOProperties.IOHandlerProperties;
@@ -17,6 +18,7 @@ import java.util.*;
 public abstract class IOHandler implements Closeable
 {
     private List<Long> backupDates;
+    protected boolean createNew;
     IOHandlerProperties props;
     protected Mode mode;
     protected static final Hashtable<String, MyBoolean> dirCreated = new Hashtable<>();
@@ -46,7 +48,12 @@ public abstract class IOHandler implements Closeable
     public List<Long> getBackupDates()
     {
         if (backupDates == null)
-            backupDates = retrieveBackupDates();
+        {
+            if (this.createNew)
+                backupDates = new ArrayList<>();
+            else
+                backupDates = retrieveBackupDates();
+        }
         return backupDates;
     }
 
@@ -64,7 +71,7 @@ public abstract class IOHandler implements Closeable
         }
         catch (Exception ex)
         {
-            Logger.log(ex);
+            FileLogger.log(ex);
             return new ArrayList<>();
         }
     }
@@ -81,6 +88,22 @@ public abstract class IOHandler implements Closeable
             sos.getInputStream().transferTo(os);
         }
     }
+
+    public void backupLog()
+    {
+        try (InputStream is = LoggerBase.getReadStream())
+        {
+            try (OutputStream os = getWriteStream(getBackupPath("backups.log", getSeparator(), this.getPerfDate(), true)))
+            {
+                is.transferTo(os);
+            }
+        } catch (Exception e)
+        {
+            LoggerBase.log(e);
+        }
+    }
+
+
 
     protected abstract boolean testConnection();
     protected abstract void createFolderInt(String path, boolean checkFolderexists ) throws TargetTransferException;
@@ -105,7 +128,7 @@ public abstract class IOHandler implements Closeable
                     //this.stats.get(State.).add(res);
                     break;
                 default:
-                    Logger.log(LogSeverity.Error, "Unkown mode " + this.mode);
+                    FileLogger.log(LogSeverity.Error, "Unkown mode " + this.mode);
             }
         }
         return res;
@@ -151,13 +174,13 @@ public abstract class IOHandler implements Closeable
 
     public static IOHandler create(IOHandler targetHandler) throws ClassNotFoundException, IllegalAccessException, InvocationTargetException, InstantiationException
     {
-        IOHandler res = create(targetHandler.props, true);
+        IOHandler res = create(targetHandler.props, true, targetHandler.createNew);
         res.perfDate = targetHandler.perfDate;
         res.mode = targetHandler.mode;
         return res;
     }
 
-    public static IOHandler create(IOHandlerProperties properties, boolean isTarget) throws ClassNotFoundException, IllegalAccessException, InvocationTargetException, InstantiationException
+    public static IOHandler create(IOHandlerProperties properties, boolean isTarget, boolean createNew) throws ClassNotFoundException, IllegalAccessException, InvocationTargetException, InstantiationException
     {
         Class<?> clazz = Class.forName(properties.getHandlerClassname());
         IOHandler res = null;
@@ -178,6 +201,7 @@ public abstract class IOHandler implements Closeable
                 res.mode = Mode.BackupTarget;
             else
                 res.mode = Mode.Source;
+            res.createNew = createNew;
             return res;
         }
     }
@@ -232,13 +256,13 @@ public abstract class IOHandler implements Closeable
         else if (mode == Mode.BackupTarget)
             file.PathBackupTarget = path;
         else
-            Logger.log(LogSeverity.Error, "Unknown backup Handler Mode " + mode);
+            FileLogger.log(LogSeverity.Error, "Unknown backup Handler Mode " + mode);
     }
 
     public static void logStats()
     {
-        Logger.log(LogSeverity.Info, getStatString(State.FoundInSource));
-        Logger.log(LogSeverity.Info, getStatString(State.TransferredToBackup));
+        FileLogger.log(LogSeverity.Info, getStatString(State.FoundInSource));
+        FileLogger.log(LogSeverity.Info, getStatString(State.TransferredToBackup));
     }
 
     private static String getStatString(State state)
@@ -258,11 +282,13 @@ public abstract class IOHandler implements Closeable
             return Utils.isNullOrEmtpy(file.PathBackupTarget) ? file.PathSource : file.PathBackupTarget;
         } else if (mode == Mode.Source)
         {
-            return file.PathSource;
+            if (Utils.isNullOrEmtpy(file.PathSource))
+                throw new TargetTransferException(this.getClass() + ": is in " + mode + "; but PathSource is Empty; maybe PathBackupTarget helps:" + file.PathBackupTarget);
+            else
+                return file.PathSource;
         } else
         {
-            Logger.log(LogSeverity.Error, "Unknown backup Handler Mode " + mode);
-            return null;
+            throw new TargetTransferException("Unknown backup Handler Mode " + mode);
         }
     }
 

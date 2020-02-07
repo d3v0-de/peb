@@ -1,7 +1,9 @@
 package de.d3v0.peb.common.dbhelper;
 
 import de.d3v0.peb.common.BackupFile;
-import de.d3v0.peb.common.Logger;
+import de.d3v0.peb.common.FileLogger;
+import de.d3v0.peb.common.LoggerBase;
+import de.d3v0.peb.common.misc.LogSeverity;
 import de.d3v0.peb.common.misc.TargetTransferException;
 import de.d3v0.peb.controller.IO.FileHandler;
 
@@ -9,14 +11,22 @@ import java.io.*;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Date;
 
 public class SqliteHelper extends DbHelper
 {
 
     protected void initConnection(boolean createNew) throws Exception
     {
-        if (!createNew)
+        if (createNew)
+        {
+            File db = new File(getDatabaseLocalPath());
+            if (db.exists())
+                throw new Exception("there is already a database file in the working copy - but that was not expected!!!! Please delete that first");
+        }
+        else
             getDatabaseFileFromTarget();
+
 
         con = DriverManager.getConnection("jdbc:sqlite:" + getDatabaseLocalPath());
         Statement s = con.createStatement();
@@ -48,15 +58,13 @@ public class SqliteHelper extends DbHelper
     {
         try
         {
-            File db = new File(getDatabaseLocalPath());
-            if (db.exists())
-                db.delete();
+            LoggerBase.log(LogSeverity.Info, "Retrieving Database file from Backup");
             BackupFile f = new FileHandler().getFileInfo(getDatabaseLocalPath(), false);
             f.PathBackupTarget = DatabaseFileName;
             targetHandler.restoreFile(f);
         } catch (Exception e)
         {
-            Logger.log(e);
+            LoggerBase.log(e);
             throw e;
         }
     }
@@ -71,9 +79,15 @@ public class SqliteHelper extends DbHelper
     @Override
     public void commit() throws SQLException, TargetTransferException, IOException
     {
+        BackupFile realFile = new FileHandler().getFileInfo(getDatabaseLocalPath(), true);
+        realFile.PathBackupTarget = this.DatabaseFileName;
+
+        BackupFile dbFile = new BackupFile(this.targetHandler, this.DatabaseFileName);
+        dbFile.Size = realFile.Size;
+        dbFile.LastModified = new Date().getTime();
+        this.Insert(dbFile, targetHandler.getPerfDate());
+
         super.commit();
-        BackupFile f = new FileHandler().getFileInfo(getDatabaseLocalPath(), true);
-        f.PathBackupTarget = this.DatabaseFileName;
-        this.targetHandler.backupFile(f);
+        this.targetHandler.backupFile(realFile);
     }
 }

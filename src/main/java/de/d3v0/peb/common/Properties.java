@@ -3,6 +3,7 @@ package de.d3v0.peb.common;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 import de.d3v0.peb.common.dbhelper.DbProperties;
+import de.d3v0.peb.common.misc.LogSeverity;
 import de.d3v0.peb.common.sourceproperties.SourceProperties;
 import de.d3v0.peb.common.IOProperties.IOHandlerProperties;
 
@@ -17,9 +18,18 @@ public class Properties
 
     public static Properties ReadConfig(String workingDir) throws IOException, ClassNotFoundException
     {
-        XStream xs = new XStream(new DomDriver());
-        FileInputStream is = new FileInputStream(getPropertiesFile(workingDir));
-        return (Properties)xs.fromXML(is);
+        try
+        {
+            XStream xs = new XStream(new DomDriver());
+            FileInputStream is = new FileInputStream(getPropertiesFile(workingDir));
+            return (Properties) xs.fromXML(is);
+        }
+        catch(Exception e)
+        {
+            LoggerBase.log(LogSeverity.Error, "Error reading Config:");
+            LoggerBase.log(e);
+            throw e;
+        }
     }
 
     public static void SaveConfig(Properties p) throws IOException

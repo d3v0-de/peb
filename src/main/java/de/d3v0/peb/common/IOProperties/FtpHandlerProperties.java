@@ -13,20 +13,20 @@ public class FtpHandlerProperties extends IOHandlerProperties
     {
         return FtpHandler.class.getCanonicalName();
     }
-	public final FtpEncrytion ftpEncrytion;
+	public final FtpEncryption ftpEncryption;
 
     public FtpHandlerProperties()
     {
         WorkerThreadCount = 15;
         Port = 21;
-		ftpEncrytion = FtpEncrytion.Explicit;
+		ftpEncryption = FtpEncryption.Explicit;
     }
 
     // TODO: extend config (ACTIVE?, PROT)
-	public enum FtpEncrytion
+	public enum FtpEncryption
 	{
 		Explicit,
 		Implicit,
-		Plain
+		None
 	}
 }

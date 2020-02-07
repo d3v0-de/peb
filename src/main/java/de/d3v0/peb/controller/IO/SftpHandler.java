@@ -2,7 +2,7 @@ package de.d3v0.peb.controller.IO;
 
 import com.jcraft.jsch.*;
 import de.d3v0.peb.common.BackupFile;
-import de.d3v0.peb.common.Logger;
+import de.d3v0.peb.common.FileLogger;
 import de.d3v0.peb.common.LoggerBase;
 import de.d3v0.peb.common.StringOutputStream;
 import de.d3v0.peb.common.misc.LogSeverity;
@@ -28,7 +28,7 @@ public class SftpHandler extends IOHandler
         {
             return getSftp().isConnected();
         } catch (Exception e) {
-            Logger.log(LogSeverity.Error, e);
+            FileLogger.log(LogSeverity.Error, e);
             this.sftp = null;
             return false;
         }
@@ -43,7 +43,7 @@ public class SftpHandler extends IOHandler
         }
         catch (Exception e)
         {
-            Logger.log(e);
+            FileLogger.log(e);
             throw new TargetTransferException("Error reading file " + path);
         }
     }
@@ -88,7 +88,7 @@ public class SftpHandler extends IOHandler
             getSftp().put(src, path);
         } catch (SftpException ex)
         {
-            Logger.log(ex);
+            FileLogger.log(ex);
             throw new TargetTransferException("Error writing file " + path);
         }
     }
@@ -104,8 +104,8 @@ public class SftpHandler extends IOHandler
         }
         catch(Exception ex)
         {
-            Logger.log(LogSeverity.Error, "Error creating folder " + folderPath);
-            Logger.log(ex);
+            FileLogger.log(LogSeverity.Error, "Error creating folder " + folderPath);
+            FileLogger.log(ex);
         }
     }
 
@@ -202,8 +202,8 @@ public class SftpHandler extends IOHandler
                 sftp.getSession().disconnect();
         } catch (JSchException e)
         {
-            Logger.log(LogSeverity.Error, "Error closing connection");
-            Logger.log(e);
+            FileLogger.log(LogSeverity.Error, "Error closing connection");
+            FileLogger.log(e);
         }
     }
 }

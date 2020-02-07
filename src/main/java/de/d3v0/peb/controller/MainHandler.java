@@ -52,36 +52,40 @@ public class MainHandler implements Runnable
     {
         try
         {
-            Logger.CreateDefault(prop.workingDir + File.separator + "peb.log");
-            targetHandlerManager = IOHandler.create(prop.targetProperties, true);
+            FileLogger.CreateDefault(prop.workingDir + File.separator + "peb.log");
+            LoggerBase.log(LogSeverity.Info, "Starting Backup");
+            targetHandlerManager = IOHandler.create(prop.targetProperties, true, this.createNew);
             dbHelper = DbHelper.Create(prop, targetHandlerManager, this.createNew);
 
             t1_startTransferQueue();
 
             for (SourceProperties source : prop.sourceProperties)
             {
-                IOHandler sourceHandler = IOHandler.create(source.IOProperties, false);
+                LoggerBase.log(LogSeverity.Info, "Starting to scan source " + source.IOProperties.BasePath);
+                IOHandler sourceHandler = IOHandler.create(source.IOProperties, false, createNew);
                 try
                 {
                     t1_processSourceFile(sourceHandler.getFileInfo(source.IOProperties.BasePath, true), source);
                 } catch (Exception e)
                 {
-                    Logger.log(e);
+                    FileLogger.log(e);
                 }
 
             }
 
+            LoggerBase.log(LogSeverity.Info, "Scan sources finished");
             fillTransferQueueFinished = true;
             t1_readTransferDoneQueue();
-            Logger.log(LogSeverity.Info, dbHelper.GetStats(targetHandlerManager.getPerfDate()));
+            FileLogger.log(LogSeverity.Info, dbHelper.GetStats(targetHandlerManager.getPerfDate()));
             IOHandler.logStats();
             dbHelper.commit();
             backupConfig();
             targetHandlerManager.saveBackupDates();
+            targetHandlerManager.backupLog();
             targetHandlerManager.close();
         } catch (Exception ex)
         {
-            Logger.log(ex);
+            FileLogger.log(ex);
         }
     }
 
@@ -115,8 +119,8 @@ public class MainHandler implements Runnable
                 rows = dbHelper.Update(bf, targetHandlerManager.getPerfDate());
             } catch (SQLException e)
             {
-                Logger.log(LogSeverity.Error, "Error Updating LastSeen for file " + bf.PathSource);
-                Logger.log(e);
+                FileLogger.log(LogSeverity.Error, "Error Updating LastSeen for file " + bf.PathSource);
+                FileLogger.log(e);
             }
 
             // Update didn't match (the file in it's current version has not already been backuped ==> make Backup
@@ -141,18 +145,18 @@ public class MainHandler implements Runnable
                     if (filter.match(bf))
                     {
                         matched = true;
-                        Logger.log(LogSeverity.Debug,"Backlist " + filter.getInfo() + "matched for " + bf.PathSource);
+                        FileLogger.log(LogSeverity.Debug,"Backlist " + filter.getInfo() + "matched for " + bf.PathSource);
                         break;
                     }
                     if (!matched)
                     {
-                        Logger.log(LogSeverity.Debug,"No Whitelist matched for " + bf.PathSource);
+                        FileLogger.log(LogSeverity.Debug,"No Whitelist matched for " + bf.PathSource);
                         return true;
                     }
             }
             else
             {
-                Logger.log(LogSeverity.Error, "Invalid value " + source.filterMode + " for SourceProperties.FilterMode");
+                FileLogger.log(LogSeverity.Error, "Invalid value " + source.filterMode + " for SourceProperties.FilterMode");
             }
         return false;
     }
@@ -174,7 +178,7 @@ public class MainHandler implements Runnable
             targetHandler = IOHandler.create(targetHandlerManager);
         } catch (Exception e)
         {
-            Logger.log(e);
+            FileLogger.log(e);
         }
 
         while (!fillTransferQueueFinished || transferQueue.size() > 0)
@@ -207,7 +211,7 @@ public class MainHandler implements Runnable
                         Thread.sleep(100);
                     } catch (InterruptedException e)
                     {
-                        Logger.log(e);
+                        FileLogger.log(e);
                     }
                 }
             }
