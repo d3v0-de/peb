@@ -9,10 +9,14 @@ import de.d3v0.peb.common.LoggerBase;
 import de.d3v0.peb.common.misc.LogSeverity;
 import de.d3v0.peb.common.misc.TargetTransferException;
 import de.d3v0.peb.common.IOProperties.FtpHandlerProperties;
+import org.apache.commons.net.io.CopyStreamEvent;
+import org.apache.commons.net.io.CopyStreamListener;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 
 public class FtpHandler extends IOHandler
 {
@@ -34,17 +38,17 @@ public class FtpHandler extends IOHandler
                 try
                 {
                     if (props().ftpEncryption == FtpHandlerProperties.FtpEncryption.None)
-                        ftpClient = new FTPClient();
+                        ftpClient = new MyFtpClient();
                     else
-                        ftpClient = new FTPSClient();
+                        ftpClient = new MyFtpsClient();
 
                     ftpClient.connect(props().HostName, props().Port);
 					ftpClient.login(props().UserName, props().Password);
                     ftpClient.enterLocalPassiveMode();
                     if (props().ftpEncryption == FtpHandlerProperties.FtpEncryption.Explicit)
                     {
-                        ((FTPSClient) ftpClient).execPBSZ(0);
-                        ((FTPSClient) ftpClient).execPROT("P");
+                        ((MyFtpsClient) ftpClient).execPBSZ(0);
+                        ((MyFtpsClient) ftpClient).execPROT("P");
                     }
                     ftpClient.sendCommand("TYPE", "I");
                     ftpClient.sendCommand("MODE", "S");
@@ -200,18 +204,27 @@ public class FtpHandler extends IOHandler
     {
         protected final OutputStream inner;
         protected final FtpHandler handler;
+        protected CSL csl;
 
         public MyOutputStream (OutputStream s, FtpHandler handler)
         {
             this.inner = s;
             this.handler = handler;
+            try
+            {
+                csl = new CSL((MyFtpClientInterface) handler.ftpClient, handler.props().KeepAliveSeconds, 1000);
+            } catch (SocketException e)
+            {
+                FileLogger.log(e);
+            }
             if (s == null)
-                FileLogger.log(LogSeverity.Error, "");
+            FileLogger.log(LogSeverity.Error, "");
         }
 
         @Override
         public void write(int i) throws IOException {
             inner.write(i);
+            csl.bytesTransferred(0,i,0);
         }
 
         @Override
@@ -222,17 +235,20 @@ public class FtpHandler extends IOHandler
         @Override
         public void write(byte[] b) throws IOException {
             inner.write(b);
+            csl.bytesTransferred(0,b.length,0);
         }
 
         @Override
         public void write(byte[] b, int off, int len) throws IOException {
             inner.write(b, off, len);
+            csl.bytesTransferred(0,b.length,0);
         }
 
         @Override
         public void close() throws IOException {
             inner.close();
             try {
+                csl.cleanUp();
                 handler.onStreamClosed();
             } catch (TargetTransferException e) {
                 FileLogger.log(e);
@@ -244,11 +260,20 @@ public class FtpHandler extends IOHandler
     {
         protected final InputStream inner;
         protected final FtpHandler handler;
+        protected CSL csl;
 
         public MyInputStream (InputStream s, FtpHandler handler)
         {
             this.inner = s;
             this.handler = handler;
+            try
+            {
+                csl = new CSL((MyFtpClientInterface) handler.ftpClient, handler.props().KeepAliveSeconds, 1000);
+            } catch (SocketException e)
+            {
+                FileLogger.log(e);
+            }
+
             if (s == null)
                 FileLogger.log(LogSeverity.Error, "");
         }
@@ -256,23 +281,126 @@ public class FtpHandler extends IOHandler
         @Override
         public int read() throws IOException
         {
-            return inner.read();
+            int res =   inner.read();
+            csl.bytesTransferred(0, res,0);
+            return res;
         }
 
         @Override
         public int read(byte[] b, int off, int len) throws IOException
         {
-            return inner.read(b, off, len);
+            int res =  inner.read(b, off, len);
+            csl.bytesTransferred(0, res,0);
+            return res;
         }
 
         @Override
         public void close() throws IOException {
             inner.close();
             try {
+                csl.cleanUp();
                 handler.onStreamClosed();
             } catch (TargetTransferException e) {
                 FileLogger.log(e);
             }
         }
+    }
+
+    private static class CSL implements CopyStreamListener {
+        private final MyFtpClientInterface parent;
+        private final long idle;
+        private final int currentSoTimeout;
+        private long time = System.currentTimeMillis();
+        private int notAcked = 0;
+
+        CSL(MyFtpClientInterface parent, long idleSeconds, int maxWait) throws SocketException {
+            this.idle = idleSeconds * 1000;
+            this.parent = parent;
+            this.currentSoTimeout = parent.getSocketTimeout();
+            parent.setSocketTimeout(maxWait);
+        }
+
+        public void bytesTransferred(CopyStreamEvent event) {
+            this.bytesTransferred(event.getTotalBytesTransferred(), event.getBytesTransferred(), event.getStreamSize());
+        }
+
+        public void bytesTransferred(long totalBytesTransferred, int bytesTransferred, long streamSize) {
+            long now = System.currentTimeMillis();
+            if (now - this.time > this.idle) {
+                try {
+                        this.parent.NoopNoReport();
+                } catch (SocketTimeoutException var9) {
+                    ++this.notAcked;
+                } catch (IOException var10) {
+                    FileLogger.log(var10);
+                }
+                this.time = now;
+            }
+        }
+
+        void cleanUp() throws IOException {
+            try {
+                while(this.notAcked-- > 0) {
+                    this.parent.getReplyNoReport();
+                }
+            } finally {
+                this.parent.setSocketTimeout(this.currentSoTimeout);
+            }
+
+        }
+    }
+
+    private class MyFtpsClient extends FTPSClient implements MyFtpClientInterface
+    {
+        public void NoopNoReport() throws IOException
+        {
+            this.__noop();
+        }
+
+        public void getReplyNoReport() throws IOException
+        {
+            this.__getReplyNoReport();
+        }
+
+        public void setSocketTimeout(int timeout) throws SocketException
+        {
+            this.setSoTimeout(timeout);
+        }
+
+        public int getSocketTimeout() throws SocketException
+        {
+            return this.getSoTimeout();
+        }
+    }
+
+    private class MyFtpClient extends FTPClient implements MyFtpClientInterface
+    {
+        public void NoopNoReport() throws IOException
+        {
+            this.__noop();
+        }
+
+        public void getReplyNoReport() throws IOException
+        {
+            this.__getReplyNoReport();
+        }
+
+        public void setSocketTimeout(int timeout) throws SocketException
+        {
+            this.setSoTimeout(timeout);
+        }
+
+        public int getSocketTimeout() throws SocketException
+        {
+            return this.getSoTimeout();
+        }
+    }
+
+    private interface MyFtpClientInterface
+    {
+        void NoopNoReport() throws IOException;
+        void getReplyNoReport() throws IOException;
+        void setSocketTimeout(int timeout) throws SocketException;
+        int getSocketTimeout() throws SocketException;
     }
 }

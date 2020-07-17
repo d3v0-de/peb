@@ -27,7 +27,7 @@ public class Utils {
             }
         }
         if (res == null)
-            res =  String.format("%.2f " + units[units.length], curSize);
+            res =  String.format("%.2f " + units[units.length - 1], curSize);
 
         if (extended)
             res = String.format("%s (%s B)", res, thousands(size));

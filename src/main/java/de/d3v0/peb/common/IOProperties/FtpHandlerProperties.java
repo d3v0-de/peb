@@ -6,14 +6,15 @@ public class FtpHandlerProperties extends IOHandlerProperties
 {
     public String HostName;
     public String UserName;
-    public final int Port;
+    public int Port;
     public String Password;
     public String HostKey;
     public String getHandlerClassname()
     {
         return FtpHandler.class.getCanonicalName();
     }
-	public final FtpEncryption ftpEncryption;
+	public FtpEncryption ftpEncryption;
+    public int KeepAliveSeconds;
 
     public FtpHandlerProperties()
     {

@@ -15,6 +15,8 @@ public class Properties
     public IOHandlerProperties targetProperties;
     public DbProperties dbProperties;
     public String workingDir;
+    public int batchRuntimeSeconds;
+    public int logStatsEverySeconds;
 
     public static Properties ReadConfig(String workingDir) throws IOException, ClassNotFoundException
     {

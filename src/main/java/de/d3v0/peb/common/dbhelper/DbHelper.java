@@ -90,9 +90,16 @@ public abstract class DbHelper
     {
         statsStatement.setLong(1, backupTime);
         ResultSet res = statsStatement.executeQuery();
-        int count = res.getInt("COUNT");
-        long Size = res.getLong("SIZE");
-        return "Stats in Db: Current Files as per Db: " + count + "; total Size as per Db " + Utils.humanReadable(Size);
+        if (res.next())
+        {
+            int count = res.getInt("COUNT");
+            long Size = res.getLong("SIZE");
+            return "Stats in Db: Current Files as per Db: " + count + "; total Size as per Db " + Utils.humanReadable(Size);
+        }
+        else
+        {
+            return "Error retrieving stats in Db";
+        }
     }
 
     protected abstract void initSchema() throws SQLException;

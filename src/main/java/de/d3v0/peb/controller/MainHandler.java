@@ -1,6 +1,7 @@
 package de.d3v0.peb.controller;
 
 import de.d3v0.peb.common.*;
+import de.d3v0.peb.common.Properties;
 import de.d3v0.peb.common.dbhelper.DbHelper;
 import de.d3v0.peb.common.misc.LogSeverity;
 import de.d3v0.peb.common.misc.TargetTransferException;
@@ -12,8 +13,10 @@ import de.d3v0.peb.controller.IO.IOHandler;
 import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 
 public class MainHandler implements Runnable
 {
@@ -22,9 +25,13 @@ public class MainHandler implements Runnable
     private IOHandler targetHandlerManager;
     private DbHelper dbHelper;
     private boolean createNew;
+    private long logStatsLastTimestamp = new Date().getTime();
 
     private static final String  ThreadNameReadTransferQueue = "readTransferQueue";
     private static final String  ThreadNamedDWorker = "dbWorker";
+    private static final String  ThreadNameTimeoutMonitor = "TimeoutMonitor";
+
+    private Dictionary<Thread, Date> threadTimeouts = new Hashtable<>();
 
     private final List<BackupFile> transferQueue;
     private final List<BackupFile> transferDoneQueue;
@@ -76,8 +83,7 @@ public class MainHandler implements Runnable
             LoggerBase.log(LogSeverity.Info, "Scan sources finished");
             fillTransferQueueFinished = true;
             t1_readTransferDoneQueue();
-            FileLogger.log(LogSeverity.Info, dbHelper.GetStats(targetHandlerManager.getPerfDate()));
-            IOHandler.logStats();
+            LogStats(true);
             dbHelper.commit();
             backupConfig();
             targetHandlerManager.saveBackupDates();
@@ -89,6 +95,17 @@ public class MainHandler implements Runnable
         }
     }
 
+    private void LogStats(boolean force) throws SQLException
+    {
+        if (force || logStatsLastTimestamp + prop.logStatsEverySeconds * 1000L < new Date().getTime())
+        {
+            logStatsLastTimestamp = new Date().getTime();
+            FileLogger.log(LogSeverity.Info, dbHelper.GetStats(targetHandlerManager.getPerfDate()));
+            IOHandler.logStats();
+        }
+    }
+
+
     private void t1_startTransferQueue()
     {
         for (int i=0 ; i< prop.targetProperties.WorkerThreadCount ; i++)
@@ -96,6 +113,9 @@ public class MainHandler implements Runnable
             Thread readworkFileQueue = new Thread(this, ThreadNameReadTransferQueue);
             readworkFileQueue.start();
         }
+        Thread timeoutMonitor = new Thread(this, ThreadNameTimeoutMonitor);
+        timeoutMonitor.setDaemon(true);
+        timeoutMonitor.start();
     }
 
     private void t1_processSourceFile(BackupFile bf, SourceProperties source) throws TargetTransferException {
@@ -109,7 +129,17 @@ public class MainHandler implements Runnable
         if (bf.type == BackupFile.FileType.Directory)
         {
             for (BackupFile child : bf.listChildren())
+            {
+                try
+                {
                     t1_processSourceFile(child, source);
+                }
+                catch (Exception ex)
+                {
+                    FileLogger.log(LogSeverity.Error, "Error listing source file for file " + child.PathSource);
+                    FileLogger.log(ex);
+                }
+            }
         } else
         {
 
@@ -181,7 +211,7 @@ public class MainHandler implements Runnable
             FileLogger.log(e);
         }
 
-        while (!fillTransferQueueFinished || transferQueue.size() > 0)
+        while (!fillTransferQueueFinished || (transferQueue.size() > 0 && batchDurationLeft()))
             {
                 BackupFile f = null;
                 synchronized (transferQueue)
@@ -209,7 +239,7 @@ public class MainHandler implements Runnable
                     try
                     {
                         Thread.sleep(100);
-                    } catch (InterruptedException e)
+                    } catch (Exception e)
                     {
                         FileLogger.log(e);
                     }
@@ -223,6 +253,14 @@ public class MainHandler implements Runnable
         {
             e.printStackTrace();
         }
+    }
+
+    private boolean batchDurationLeft()
+    {
+        if (this.prop.batchRuntimeSeconds == 0)
+            return true;
+        else
+            return (this.targetHandlerManager.getPerfDate() + this.prop.batchRuntimeSeconds * 1000L) > new Date().getTime();
     }
 
     private void t1_readTransferDoneQueue()
@@ -244,7 +282,7 @@ public class MainHandler implements Runnable
                         synchronized (transferInWorkList)
                         {
                             // finished
-                            if (transferQueue.size() == 0 && transferInWorkList.size() == 0)
+                            if ((transferQueue.size() == 0 || !batchDurationLeft()) && transferInWorkList.size() == 0)
                                 shouldRun = false;
                         }
                     }
@@ -265,7 +303,8 @@ public class MainHandler implements Runnable
                 try
                 {
                     Thread.sleep(100);
-                } catch (InterruptedException e)
+                    LogStats(false);
+                } catch (Exception e)
                 {
                     LoggerBase.log(e);
                 }
@@ -279,7 +318,9 @@ public class MainHandler implements Runnable
 
         try
         {
+            threadTimeouts.put(Thread.currentThread(), new Date());
             targetHandler.backupFile(f);
+            threadTimeouts.remove(Thread.currentThread());
             synchronized (transferDoneQueue)
             {
                 transferDoneQueue.add(f);
@@ -305,5 +346,29 @@ public class MainHandler implements Runnable
             t1_performBackupInt();
         else if (Thread.currentThread().getName() == ThreadNameReadTransferQueue)
             t2_readTransferQueue();
+        else if (Thread.currentThread().getName() == ThreadNameTimeoutMonitor)
+            t3_monitorTimeouts();
+    }
+
+    private void t3_monitorTimeouts()
+    {
+        boolean run= false;
+        while (run)
+        {
+            try
+            {
+                Thread.sleep(1000);
+                for (Iterator<Thread> it = this.threadTimeouts.keys().asIterator(); it.hasNext(); )
+                {
+                    Thread transferThread = it.next();
+                    if (this.threadTimeouts.get(transferThread).before(new Date()))
+                        transferThread.interrupt();
+                }
+
+            } catch (InterruptedException e)
+            {
+                LoggerBase.log(e);
+            }
+        }
     }
 }
