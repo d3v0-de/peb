@@ -114,6 +114,21 @@ public class FtpHandler extends IOHandler
     }
 
     @Override
+    protected boolean checkFolderexists(String path)
+    {
+        try
+        {
+            return getFtp().changeWorkingDirectory(path);
+        } catch (IOException e)
+        {
+            return false;
+        } catch (TargetTransferException e)
+        {
+            return false;
+        }
+    }
+
+    @Override
     public BackupFile getFileInfoInt(String path, boolean forBackup) {
         //TODO impl:
         return null;

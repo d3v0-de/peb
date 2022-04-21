@@ -10,13 +10,9 @@ import de.d3v0.peb.common.sourceproperties.SourceProperties;
 import de.d3v0.peb.controller.IO.FileHandler;
 import de.d3v0.peb.controller.IO.IOHandler;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
 
 public class MainHandler implements Runnable
 {
@@ -28,7 +24,7 @@ public class MainHandler implements Runnable
     private long logStatsLastTimestamp = new Date().getTime();
 
     private static final String  ThreadNameReadTransferQueue = "readTransferQueue";
-    private static final String  ThreadNamedDWorker = "dbWorker";
+    private static final String ThreadNameDbWorker = "dbWorker";
     private static final String  ThreadNameTimeoutMonitor = "TimeoutMonitor";
 
     private Dictionary<Thread, Date> threadTimeouts = new Hashtable<>();
@@ -51,7 +47,7 @@ public class MainHandler implements Runnable
 
     public void performBackup()
     {
-        Thread mainWorker = new Thread(this, ThreadNamedDWorker);
+        Thread mainWorker = new Thread(this, ThreadNameDbWorker);
         mainWorker.start();
     }
 
@@ -84,11 +80,32 @@ public class MainHandler implements Runnable
             fillTransferQueueFinished = true;
             t1_readTransferDoneQueue();
             LogStats(true);
-            dbHelper.commit();
+            dbHelper.commit_and_close();
             backupConfig();
             targetHandlerManager.saveBackupDates();
             targetHandlerManager.backupLog();
             targetHandlerManager.close();
+            writeDoneFile(true);
+        } catch (Exception ex)
+        {
+            FileLogger.log(ex);
+            writeDoneFile(false);
+        }
+    }
+
+    private void writeDoneFile(boolean success)
+    {
+        try (FileOutputStream fs = new FileOutputStream(this.prop.workingDir + File.separator + "doneFile.log"))
+        {
+            OutputStreamWriter w = new OutputStreamWriter(fs);
+
+            if (success)
+                w.write("OK");
+            else
+                w.write("FAIL");
+
+            w.flush();
+            w.close();
         } catch (Exception ex)
         {
             FileLogger.log(ex);
@@ -342,7 +359,7 @@ public class MainHandler implements Runnable
     @Override
     public void run()
     {
-        if (Thread.currentThread().getName() == ThreadNamedDWorker)
+        if (Thread.currentThread().getName() == ThreadNameDbWorker)
             t1_performBackupInt();
         else if (Thread.currentThread().getName() == ThreadNameReadTransferQueue)
             t2_readTransferQueue();

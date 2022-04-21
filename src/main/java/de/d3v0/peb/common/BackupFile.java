@@ -11,7 +11,9 @@ public class BackupFile
     public long LastModified;
     public FileType type = FileType.undefined;
     public String Separator;
+    public String Hash;
     private final IOHandler ioHandler;
+
 
 
     public BackupFile(IOHandler ioHandler, String path)

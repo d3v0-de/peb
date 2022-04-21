@@ -2,6 +2,9 @@ package de.d3v0.peb.common;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
+import com.thoughtworks.xstream.security.NoTypePermission;
+import com.thoughtworks.xstream.security.NullPermission;
+import com.thoughtworks.xstream.security.PrimitiveTypePermission;
 import de.d3v0.peb.common.dbhelper.DbProperties;
 import de.d3v0.peb.common.misc.LogSeverity;
 import de.d3v0.peb.common.sourceproperties.SourceProperties;
@@ -23,6 +26,12 @@ public class Properties
         try
         {
             XStream xs = new XStream(new DomDriver());
+            xs.addPermission(NoTypePermission.NONE); //forbid everything
+            xs.addPermission(NullPermission.NULL);   // allow "null"
+            xs.addPermission(PrimitiveTypePermission.PRIMITIVES); // allow primitive types
+            xs.allowTypesByWildcard(new String[] {
+                    "de.d3v0.peb.**"});
+
             FileInputStream is = new FileInputStream(getPropertiesFile(workingDir));
             return (Properties) xs.fromXML(is);
         }

@@ -110,6 +110,13 @@ public class SftpHandler extends IOHandler
     }
 
     @Override
+    protected boolean checkFolderexists(String path)
+    {
+        //TODO impl:
+        return false;
+    }
+
+    @Override
     public BackupFile getFileInfoInt(String path, boolean forBackup) {
         //TODO impl:
         return null;

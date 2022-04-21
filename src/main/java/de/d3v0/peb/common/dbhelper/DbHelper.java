@@ -56,13 +56,15 @@ public abstract class DbHelper
     protected void InitStatments() throws SQLException
     {
         updateStatement = con.prepareStatement("update entry set lastSeen = ? where path = ? and lastMod = ? and size = ?");
-        insertStatement = con.prepareStatement("insert into entry (path, lastMod, lastSeen, lastBackup, Size) VALUES(?, ?, ?, ?, ?)");
+        insertStatement = con.prepareStatement("insert into entry (path, lastMod, lastSeen, lastBackup, Size, fileHash) VALUES(?, ?, ?, ?, ?, ?)");
         statsStatement = con.prepareStatement("select count(*) COUNT, sum(Size) SIZE from entry where lastSeen = ?");
     }
 
-    public void commit() throws SQLException, TargetTransferException, IOException
+    public void commit_and_close() throws SQLException, TargetTransferException, IOException
     {
-        con.commit();
+        if (!con.getAutoCommit())
+            con.commit();
+
         con.close();
     }
 
@@ -83,6 +85,7 @@ public abstract class DbHelper
         insertStatement.setLong(3, backupTime);
         insertStatement.setLong(4, backupTime);
         insertStatement.setLong(5, file.Size);
+        insertStatement.setString(6, file.Hash);
         insertStatement.executeUpdate();
     }
 

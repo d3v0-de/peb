@@ -68,6 +68,13 @@ public class FileHandler extends IOHandler
         }
     }
 
+    @Override
+    protected boolean checkFolderexists(String path)
+    {
+        // TODO
+        return false;
+    }
+
     private boolean folderExists(String path)
     {
         File dir = new File(path);

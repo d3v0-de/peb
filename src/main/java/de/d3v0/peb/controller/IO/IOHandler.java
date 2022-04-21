@@ -12,6 +12,10 @@ import de.d3v0.peb.common.IOProperties.IOHandlerProperties;
 import java.io.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.math.BigInteger;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -23,6 +27,19 @@ public abstract class IOHandler implements Closeable
     protected Mode mode;
     protected static final Hashtable<String, MyBoolean> dirCreated = new Hashtable<>();
     protected static final Hashtable<State, Statistics> stats = new Hashtable<>();
+
+    private MessageDigest mdigest;
+    byte[] md5Buffer = new byte[1024*1024];
+
+    {
+        try
+        {
+            mdigest = MessageDigest.getInstance("MD5");
+        } catch (NoSuchAlgorithmException e)
+        {
+            e.printStackTrace();
+        }
+    }
 
     public long getPerfDate()
     {
@@ -107,6 +124,7 @@ public abstract class IOHandler implements Closeable
 
     protected abstract boolean testConnection();
     protected abstract void createFolderInt(String path, boolean checkFolderexists ) throws TargetTransferException;
+    protected abstract boolean checkFolderexists(String path);
     protected abstract BackupFile getFileInfoInt(String localPath, boolean forBackup);
     public abstract Iterable<? extends BackupFile> listChildren(BackupFile parent) throws TargetTransferException;
 
@@ -114,10 +132,13 @@ public abstract class IOHandler implements Closeable
     protected abstract OutputStream getWriteStream(String path) throws TargetTransferException;
     protected abstract String getSeparator();
 
-    public BackupFile getFileInfo(String localPath, boolean forBackup)
+    public BackupFile getFileInfo(String localPath, boolean forBackup) throws TargetTransferException
     {
-        BackupFile res = getFileInfoInt(localPath,  forBackup);
+        BackupFile res = getFileInfoInt(localPath, forBackup);
         if (res.type == BackupFile.FileType.File) {
+            if (forBackup)
+                GenerateHash(localPath, res);
+
             switch (this.mode) {
                 case Source:
                     getStat(State.FoundInSource).count++;
@@ -132,6 +153,26 @@ public abstract class IOHandler implements Closeable
             }
         }
         return res;
+    }
+
+    private void GenerateHash(String localPath, BackupFile res) throws TargetTransferException
+    {
+        try (InputStream is = getReadStream(res.PathSource))
+        {
+            int bytesCount = 0;
+            while ((bytesCount = is.read(md5Buffer)) != -1)
+            {
+                mdigest.update(md5Buffer, 0, bytesCount);
+            }
+            BigInteger bigInt = new BigInteger(1, mdigest.digest());
+            res.Hash = bigInt.toString(16);
+            while(res.Hash.length() < 32 ){
+                res.Hash = "0"+res.Hash;
+            }
+        } catch (IOException e)
+        {
+            LoggerBase.log(LogSeverity.Error, "Error getHash: " + localPath);
+        }
     }
 
     public void restoreFile(BackupFile file) throws BackupNotFoundException, TargetTransferException, IOException
@@ -150,19 +191,32 @@ public abstract class IOHandler implements Closeable
         }
     }
 
-    protected void backupFile(BackupFile file, long backupDate) throws TargetTransferException, IOException
+    protected void backupFile(BackupFile file, long backupDate) throws IOException
     {
-        String targetPath= getBackupPath(file, backupDate, true);
-        for (int i = 0; i < 2 ; i++) {
-            if (this.testConnection())
-                break;
-        }
-        try(OutputStream os = getWriteStream(targetPath)) {
-            try (InputStream is =  file.getIOHandler().getReadStream(file.PathSource)) {
-            long size= is.transferTo(os);
-            getStat(State.TransferredToBackup).count++;
-            getStat(State.TransferredToBackup).size += size;
+        try
+        {
+            String targetPath = getBackupPath(file, backupDate, true);
+            for (int i = 0; i < 2; i++)
+            {
+                if (this.testConnection())
+                    break;
             }
+            try (OutputStream os = getWriteStream(targetPath))
+            {
+                try (InputStream is = file.getIOHandler().getReadStream(file.PathSource))
+                {
+                    long size = is.transferTo(os);
+                    getStat(State.TransferredToBackup).count++;
+                    getStat(State.TransferredToBackup).size += size;
+                }
+            }
+        }
+        catch (TargetTransferException ex)
+        {
+            String path = "null";
+            if (file != null)
+                path = file.PathSource;
+            LoggerBase.log(LogSeverity.Error, "Error backupFile: " + path);
         }
     }
 
@@ -228,16 +282,17 @@ public abstract class IOHandler implements Closeable
 
             synchronized (exists)
             {
-                if (!exists.Value)
+                for (int i=0; i<2 && !exists.Value ; i++)
                 {
                     boolean checkFolderexists = props.BasePath.contains(currentPath.toString());
                     createFolderInt(currentPath.toString(), checkFolderexists);
-                    exists.Value = true;
+                    exists.Value = this.checkFolderexists(currentPath.toString());
                 }
             }
             currentPath.append(getSeparator());
         }
     }
+
 
     protected String fixSeparators(String path)  throws TargetTransferException
     {

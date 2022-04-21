@@ -77,7 +77,7 @@ public class SqliteHelper extends DbHelper
     private final String DatabaseFileName = "fastbackup.db";
 
     @Override
-    public void commit() throws SQLException, TargetTransferException, IOException
+    public void commit_and_close() throws SQLException, TargetTransferException, IOException
     {
         BackupFile realFile = new FileHandler().getFileInfo(getDatabaseLocalPath(), true);
         realFile.PathBackupTarget = this.DatabaseFileName;
@@ -87,7 +87,7 @@ public class SqliteHelper extends DbHelper
         dbFile.LastModified = new Date().getTime();
         this.Insert(dbFile, targetHandler.getPerfDate());
 
-        super.commit();
+        super.commit_and_close();
         this.targetHandler.backupFile(realFile);
     }
 }
